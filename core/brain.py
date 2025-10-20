@@ -1,102 +1,127 @@
-# core/brain.py
+# core/brain.py - المحرك الرئيسي
 import json
-import logging
+import os
 from datetime import datetime
-from typing import Dict, List, Any
-import importlib
-
-from .analyzer import AdvancedAnalyzer
-from .learner import AdaptiveLearner
-from .coder import CodeGenerator
-from .executor import SafeExecutor
 
 class AICoreBrain:
     def __init__(self):
-        self.analyzer = AdvancedAnalyzer()
-        self.learner = AdaptiveLearner()
-        self.coder = CodeGenerator()
-        self.executor = SafeExecutor()
-        self.setup_modules()
+        self.setup_directories()
+        self.load_knowledge()
+        self.conversation_history = []
         
-    def setup_modules(self):
-        """تحميل الوحدات المتخصصة"""
-        self.modules = {}
-        modules_list = [
-            'network_engineer',
-            'system_engineer', 
-            'code_developer',
-            'security_analyst',
-            'project_manager'
-        ]
-        
-        for module_name in modules_list:
+    def setup_directories(self):
+        """إنشاء المجلدات الضرورية"""
+        dirs = ['knowledge', 'memory', 'logs', 'projects']
+        for dir_name in dirs:
+            os.makedirs(dir_name, exist_ok=True)
+    
+    def load_knowledge(self):
+        """تحميل قاعدة المعرفة"""
+        knowledge_path = 'knowledge/knowledge_base.json'
+        if os.path.exists(knowledge_path):
             try:
-                module = importlib.import_module(f'modules.{module_name}')
-                self.modules[module_name] = getattr(module, module_name.title().replace('_', ''))()
-            except Exception as e:
-                logging.warning(f"تعذر تحميل الوحدة {module_name}: {e}")
-    
-    def process_message(self, message: str, user_id: str) -> Dict[str, Any]:
-        """معالجة الرسالة الرئيسية"""
-        # تحليل متقدم للرسالة
-        analysis = self.analyzer.analyze(message, user_id)
-        
-        # التعلم من الرسالة
-        self.learner.learn_from_message(message, analysis, user_id)
-        
-        # توجيه الرسالة للوحدة المناسبة
-        response = self.route_to_module(message, analysis, user_id)
-        
-        return response
-    
-    def route_to_module(self, message: str, analysis: Dict, user_id: str) -> Dict[str, Any]:
-        """توجيه الرسالة للوحدة المتخصصة المناسبة"""
-        intent = analysis.get('intent', 'general')
-        
-        if intent == 'code_generation':
-            return self.modules['code_developer'].handle_code_request(message, analysis)
-        
-        elif intent == 'network_management':
-            return self.modules['network_engineer'].handle_network_request(message, analysis)
-        
-        elif intent == 'system_administration':
-            return self.modules['system_engineer'].handle_system_request(message, analysis)
-        
-        elif intent == 'security_analysis':
-            return self.modules['security_analyst'].handle_security_request(message, analysis)
-        
-        elif intent == 'project_management':
-            return self.modules['project_manager'].handle_project_request(message, analysis)
-        
+                with open(knowledge_path, 'r', encoding='utf-8') as f:
+                    self.knowledge = json.load(f)
+            except:
+                self.create_default_knowledge()
         else:
-            return self.generate_general_response(message, analysis)
+            self.create_default_knowledge()
     
-    def generate_general_response(self, message: str, analysis: Dict) -> Dict[str, Any]:
-        """توليد رد عام"""
-        # هنا يمكنك إضافة منطق الرد الذكي العام
-        response = {
-            'message': f"أفهم أنك تطلب: {message}. دعني أساعدك في ذلك...",
-            'type': 'general',
-            'suggestions': [
-                "هل تريد مساعدة في البرمجة؟",
-                "هل تحتاج لتحليل شبكة؟", 
-                "هل تريد مساعدة في إدارة النظام؟"
-            ]
+    def create_default_knowledge(self):
+        """إنشاء معرفة افتراضية"""
+        self.knowledge = {
+            "intents": {
+                "programming": ["برمجة", "كود", "برمج", "تطوير", "سكريبت"],
+                "networking": ["شبكة", "انترنت", "اتصال", "راوتر", "ip"],
+                "systems": ["نظام", "خادم", "سيرفر", "لينكس", "أوبنتو"],
+                "security": ["أمن", "حماية", "اختراق", "فايروس", "أمان"],
+                "projects": ["مشروع", "بدء", "إنشاء", "جديد"]
+            },
+            "responses": {
+                "programming": "🎯 مجال البرمجة! أستطيع:\n• كتابة أكواد Python\n• تطوير واجهات ويب\n• إنشاء سكريبتات أتمتة\n• حل مشاكل البرمجة\n\nما الذي تريد برمجته؟",
+                "networking": "🌐 مجال الشبكات! أستطيع:\n• شرح مفاهيم الشبكات\n• تحليل مشاكل الاتصال\n• تصميم شبكات\n• تأمين الشبكات\n\nما استفسارك؟",
+                "systems": "🖥️ مجال الأنظمة! أستطيع:\n• إدارة الخوادم\n• تحليل أداء النظام\n• حل مشاكل النظام\n• نصائح تحسين الأداء\n\nكيف أساعد؟",
+                "security": "🔒 الأمن السيبراني! أستطيع:\n• تحليل الثغرات\n• نصائح أمنية\n• تأمين التطبيقات\n• مراجعة الأكواد\n\nما الذي تحتاج؟",
+                "projects": "🚀 إدارة المشاريع! أستطيع:\n• إنشاء مشاريع جديدة\n• تنظيم الملفات\n• تخطيط المشاريع\n• إدارة المهام\n\nأخبرني عن مشروعك"
+            },
+            "code_templates": {
+                "python_web": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef home():\n    return 'مرحباً!'\n\nif __name__ == '__main__':\n    app.run(debug=True)",
+                "python_script": "#!/usr/bin/env python3\n# سكريبت Python مفيد\n\nimport os\nimport sys\n\ndef main():\n    print('مرحباً بالعالم!')\n\nif __name__ == '__main__':\n    main()"
+            }
         }
-        return response
+        self.save_knowledge()
     
-    def generate_code(self, requirements: str, language: str = 'python') -> Dict[str, Any]:
-        """توليد كود متقدم"""
-        return self.coder.generate(requirements, language)
+    def save_knowledge(self):
+        """حفظ المعرفة"""
+        with open('knowledge/knowledge_base.json', 'w', encoding='utf-8') as f:
+            json.dump(self.knowledge, f, ensure_ascii=False, indent=2)
     
-    def analyze_system(self, system_type: str) -> Dict[str, Any]:
-        """تحليل النظام"""
-        return self.modules['system_engineer'].analyze_system(system_type)
+    def analyze_intent(self, message):
+        """تحليل نية المستخدم"""
+        message_lower = message.lower()
+        
+        for intent, keywords in self.knowledge["intents"].items():
+            for keyword in keywords:
+                if keyword in message_lower:
+                    return intent
+        
+        return "general"
     
-    def network_scan(self, target: str) -> Dict[str, Any]:
-        """مسح الشبكة"""
-        return self.modules['network_engineer'].scan_network(target)
+    def process_message(self, message, user_id="default"):
+        """معالجة الرسالة الرئيسية"""
+        intent = self.analyze_intent(message)
+        
+        # حفظ المحادثة
+        conversation = {
+            "timestamp": datetime.now().isoformat(),
+            "user_message": message,
+            "intent": intent,
+            "user_id": user_id
+        }
+        self.conversation_history.append(conversation)
+        self.save_conversation()
+        
+        # توليد الرد
+        if intent in self.knowledge["responses"]:
+            response = self.knowledge["responses"][intent]
+        else:
+            response = f"🧠 أفهم أنك تقول: '{message}'\n\nأستطيع مساعدتك في:\n{self.list_capabilities()}"
+        
+        return {
+            "message": response,
+            "type": intent,
+            "suggestions": self.generate_suggestions(intent)
+        }
     
-    def create_project(self, project_name: str, project_type: str) -> Dict[str, Any]:
-        """إنشاء مشروع"""
-        return self.modules['project_manager'].create_project(project_name, project_type)
+    def list_capabilities(self):
+        """عرض القدرات المتاحة"""
+        return "• 🤖 البرمجة وتطوير الأكواد\n• 🌐 الشبكات والاتصالات\n• 🖥️ إدارة الأنظمة\n• 🔒 الأمن السيبراني\n• 🚀 إدارة المشاريع"
+    
+    def generate_suggestions(self, intent):
+        """توليد اقتراحات متعلقة"""
+        suggestions_map = {
+            "programming": ["أنشئ لي سكريبت Python", "ساعدني في حل خطأ برمجي", "أنشئ موقع ويب بسيط"],
+            "networking": ["اشرح مفهوم TCP/IP", "كيف أصلح مشكلة اتصال", "تصميم شبكة صغيرة"],
+            "systems": ["تحليل أداء النظام", "إعداد خادم ويب", "حل مشكلة في الذاكرة"],
+            "security": ["فحص أمان تطبيق", "نصائح أمنية مهمة", "كيف أحمي شبكتي"],
+            "general": ["مساعدتي في البرمجة", "شرح مفاهيم الشبكات", "تحليل نظام"]
+        }
+        return suggestions_map.get(intent, ["كيف يمكنني مساعدتك؟"])
+    
+    def save_conversation(self):
+        """حفظ المحادثة"""
+        try:
+            with open('memory/conversation_memory.json', 'w', encoding='utf-8') as f:
+                json.dump(self.conversation_history[-100:], f, ensure_ascii=False, indent=2)
+        except:
+            pass
+    
+    def generate_code(self, requirements, language="python"):
+        """توليد كود"""
+        template = self.knowledge["code_templates"].get("python_script", "# كود Python\nprint('مرحباً!')")
+        
+        return {
+            "code": f"# 🎯 الكود المطلوب: {requirements}\n\n{template}",
+            "explanation": f"هذا كود {language} ينفذ: {requirements}",
+            "language": language
+        }
