@@ -1,0 +1,25 @@
+{
+  "qa_pairs": {
+    "برمجة": {
+      "ما هو بايثون؟": "بايثون لغة برمجة عالية المستوى سهلة التعلم، تستخدم في تطوير الويب، تحليل البيانات، الذكاء الاصطناعي، والأتمتة.",
+      "كيف أنشئ موقع ويب؟": "لإنشاء موقع ويب: 1) تعلم HTML/CSS/JavaScript 2) اختر إطار عمل مثل Flask أو Django 3) استخدم قواعد البيانات 4) انشر على خادم ويب",
+      "ما الفرق بين list و tuple؟": "List قابلة للتعديل، Tuple ثابتة لا يمكن تعديلها. List تستخدم [] و Tuple تستخدم ()",
+      "كيف أتعلم البرمجة؟": "ابدأ بلغة سهلة مثل Python، تدرب على مشاريع صغيرة، استخدم منصات التعلم، وانضم لمجتمعات المبرمجين.",
+      "ما هي GitHub؟": "منصة لتخزين ومشاركة الأكواد، تتيح التعاون بين المطورين وإدارة إصدارات المشاريع."
+    },
+    "شبكات": {
+      "ما هو IP؟": "عنوان IP هو عنوان فريد يحدد جهازك على الشبكة، مثل عنوان المنزل في العالم الحقيقي.",
+      "كيف يعمل DNS؟": "DNS يحول أسماء النطاقات (مثل google.com) إلى عناوين IP رقمية يمكن للأجهزة فهمها.",
+      "ما الفرق بين TCP و UDP؟": "TCP موثوق مع تأكيد الاستلام، UDP سريع بدون تأكيد - مناسب للمكالمات الصوتية والفيديو",
+      "ما هي شبكة LAN؟": "شبكة محلية تربط أجهزة في منطقة صغيرة مثل المنزل أو المكتب.",
+      "كيف أحمي شبكتي؟": "استخدم كلمة مرور قوية، فعّل التشفير، حدّث البرامج بانتظام، واستخدم جدار حماية."
+    }
+  },
+  "code_templates": {
+    "python_web": "from flask import Flask\\napp = Flask(__name__)\\n\\n@app.route('/')\\ndef home():\\n    return 'مرحباً!'\\n\\nif __name__ == '__main__':\\n    app.run(debug=True)",
+    "python_data_analysis": "import pandas as pd\\nimport matplotlib.pyplot as plt\\n\\ndata = pd.read_csv('data.csv')\\nprint(data.describe())\\ndata.plot()\\nplt.show()",
+    "html_responsive": "<!DOCTYPE html>\\n<html>\\n<head>\\n    <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\">\\n    <title>موقعي</title>\\n</head>\\n<body>\\n    <h1>مرحباً!</h1>\\n</body>\\n</html>"
+  },
+  "user_profiles": {},
+  "learning_data": {}
+}
