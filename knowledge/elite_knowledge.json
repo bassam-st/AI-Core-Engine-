@@ -1,0 +1,53 @@
+{
+  "expert_qa": {
+    "برمجة متقدمة": {
+      "كيف أنشئ API متقدم؟": "لإنشاء API متقدم: 1) استخدم FastAPI أو Flask-RESTful 2) أضف المصادقة JWT 3) نفذ rate limiting 4) وثق API باستخدام Swagger",
+      "ما هي microservices؟": "هندسة microservices تقسم التطبيق إلى خدمات صغيرة مستقلة، كل خدمة تركز على وظيفة محددة وتتواصل عبر APIs.",
+      "كيف أحسن أداء قاعدة البيانات؟": "1) فهرسة الجداول 2) استخدم queries فعالة 3) اضبط إعدادات cache 4) استخدم connection pooling",
+      "ما هو Docker وكيف أستخدمه؟": "Docker نظام containerization يحزم التطبيق واعتماداته في حاوية قابلة للنشر على أي نظام.",
+      "كيف أنشئ تطبيق تعلم آلي؟": "1) جمع البيانات 2) تنظيف البيانات 3) اختيار النموذج 4) التدريب 5) التقييم 6) النشر"
+    },
+    "أمن سيبراني": {
+      "كأحمي خادمي؟": "1) تحديث النظام 2) جدار حماية 3) fail2ban 4) تعطيل login بالroot 5) استخدام SSH keys",
+      "ما هي هجمات DDoS؟": "هجمات الحرمان من الخدمة تهدف لإغراق الخادم بطلبات زائفة لمنع الوصول للخدمة الحقيقية.",
+      "كيف أكتشف الاختراقات؟": "راقب سجلات النظام، استخدم أنظمة كشف التسلل، افحص العمليات غير المعتادة، تتبع اتصالات الشبكة.",
+      "ما هو penetration testing؟": "اختبار الاختراق هو محاكاة هجمات حقيقية لاكتشاف الثغرات الأمنية في النظام."
+    },
+    "ذكاء اصطناعي": {
+      "ما هو الفرق بين AI و ML؟": "الذكاء الاصطناعي مفهوم أوسع، التعلم الآلي جزء منه يركز على تعلم النماذج من البيانات.",
+      "كيف أعمل نموذج تعلم عميق؟": "1) TensorFlow/PyTorch 2) بناء architecture 3) تدريب النموذج 4) ضبط hyperparameters 5) التقييم",
+      "ما هي الشبكات العصبية؟": "محاكاة للدماغ البشري، تتكون من طبقات عصبونية تتعلم الأنماط المعقدة من البيانات."
+    }
+  },
+  "code_templates": {
+    "python_ai_chatbot": "import numpy as np\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.metrics.pairwise import cosine_similarity\nimport json\n\nclass AdvancedChatBot:\n    def __init__(self):\n        self.vectorizer = TfidfVectorizer()\n        self.knowledge_base = {\n            'greetings': ['مرحباً', 'أهلاً', 'اهلاوسهلا'],\n            'questions': {\n                'ما هو اسمك': 'أنا بوت الدردشة الذكي!',\n                'كيف حالك': 'أنا بخير، شكراً لسؤالك!'\n            }\n        }\n    \n    def respond(self, message):\n        if any(greet in message for greet in self.knowledge_base['greetings']):\n            return 'مرحباً بك! كيف يمكنني مساعدتك؟'\n        \n        for question, answer in self.knowledge_base['questions'].items():\n            if question in message:\n                return answer\n        \n        return 'هذا سؤال مثير للاهتمام! دعني أفكر في إجابة مناسبة.'\n\nbot = AdvancedChatBot()\nprint(bot.respond('مرحباً'))",
+    "react_components": "import React, { useState, useEffect } from 'react';\n\nfunction AdvancedApp() {\n  const [data, setData] = useState([]);\n  const [loading, setLoading] = useState(true);\n\n  useEffect(() => {\n    fetch('/api/data')\n      .then(response => response.json())\n      .then(data => {\n        setData(data);\n        setLoading(false);\n      });\n  }, []);\n\n  if (loading) return <div>جاري التحميل...</div>;\n\n  return (\n    <div className=\"app\">\n      <h1>تطبيق React متقدم</h1>\n      <div className=\"data-grid\">\n        {data.map(item => (\n          <div key={item.id} className=\"card\">\n            <h3>{item.title}</h3>\n            <p>{item.description}</p>\n          </div>\n        ))}\n      </div>\n    </div>\n  );\n}\n\nexport default AdvancedApp;",
+    "nodejs_api": "const express = require('express');\nconst jwt = require('jsonwebtoken');\nconst bcrypt = require('bcrypt');\nconst app = express();\n\napp.use(express.json());\n\nconst users = [];\nconst posts = [];\n\nconst authenticateToken = (req, res, next) => {\n  const authHeader = req.headers['authorization'];\n  const token = authHeader && authHeader.split(' ')[1];\n\n  if (!token) {\n    return res.status(401).json({ error: 'الوصول مرفوض' });\n  }\n\n  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {\n    if (err) return res.status(403).json({ error: 'رمز غير صالح' });\n    req.user = user;\n    next();\n  });\n};\n\napp.post('/register', async (req, res) => {\n  try {\n    const hashedPassword = await bcrypt.hash(req.body.password, 10);\n    const user = { \n      id: users.length + 1, \n      username: req.body.username, \n      password: hashedPassword \n    };\n    users.push(user);\n    res.status(201).json({ message: 'تم إنشاء الحساب بنجاح' });\n  } catch {\n    res.status(500).json({ error: 'خطأ في الخادم' });\n  }\n});\n\napp.listen(3000, () => {\n  console.log('الخادم يعمل على port 3000');\n});"
+  },
+  "learning_paths": {
+    "مطور ويب متكامل": [
+      "HTML5 & CSS3 المتقدم",
+      "JavaScript ES6+",
+      "React أو Vue.js", 
+      "Node.js و Express",
+      "قواعد البيانات SQL/NoSQL",
+      "DevOps والنشر"
+    ],
+    "خبير أمن سيبراني": [
+      "أساسيات الشبكات",
+      "أنظمة التشغيل",
+      "أدوات الأمن",
+      "اختبار الاختراق",
+      "تحقيق جرائم رقمية",
+      "تأمين السحابة"
+    ],
+    "مهندس تعلم آلي": [
+      "Python للإحصاء",
+      "رياضيات التعلم الآلي",
+      "مكتبات ML (scikit-learn)",
+      "التعلم العميق",
+      "معالجة اللغة الطبيعية",
+      "نشر النماذج"
+    ]
+  }
+}
