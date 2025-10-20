@@ -1,267 +1,86 @@
 #!/usr/bin/env python3
-# النواة الذكية المتقدمة - إصدار النخبة
+# النواة الذكية المتقدمة - إصدار Render المتوافق
 
 import os
 import json
 import logging
 import requests
 import re
-import base64
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template
-import numpy as np
-import nltk
-from sentence_transformers import SentenceTransformer, util
-import matplotlib.pyplot as plt
-import io
-import csv
-import sqlite3
-
-# تحميل النماذج المتقدمة
-try:
-    semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
-    MODEL_LOADED = True
-    print("✅ تم تحميل النماذج المتقدمة بنجاح!")
-except Exception as e:
-    print(f"⚠️  تعذر تحميل النماذج المتقدمة: {e}")
-    MODEL_LOADED = False
 
 app = Flask(__name__)
 
-class EliteAICore:
+class SmartAICore:
     def __init__(self):
         self.setup_directories()
-        self.load_advanced_knowledge()
-        self.setup_nltk()
+        self.load_knowledge()
         self.conversation_memory = []
         self.user_profiles = {}
         
     def setup_directories(self):
-        """إنشاء مجلدات متقدمة"""
-        dirs = ['knowledge', 'memory', 'models', 'cache', 'projects', 'uploads']
+        """إنشاء المجلدات الأساسية"""
+        dirs = ['knowledge', 'memory', 'projects']
         for dir_name in dirs:
             os.makedirs(dir_name, exist_ok=True)
     
-    def setup_nltk(self):
-        """إعداد NLTK المتقدم"""
-        try:
-            nltk.data.find('tokenizers/punkt')
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download('punkt')
-            nltk.download('stopwords')
-    
-    def load_advanced_knowledge(self):
-        """تحميل معرفة النخبة"""
+    def load_knowledge(self):
+        """تحميل المعرفة"""
         try:
             with open('knowledge/elite_knowledge.json', 'r', encoding='utf-8') as f:
                 self.knowledge = json.load(f)
-            print("✅ تم تحميل المعرفة المتقدمة بنجاح!")
+            print("✅ تم تحميل المعرفة بنجاح!")
         except Exception as e:
-            print(f"⚠️  تعذر تحميل المعرفة: {e}")
-            self.knowledge = self.create_elite_knowledge()
+            print(f"⚠️ تعذر تحميل المعرفة: {e}")
+            self.knowledge = self.create_basic_knowledge()
     
-    def create_elite_knowledge(self):
-        """إنشاء معرفة النخبة"""
-        elite_knowledge = {
+    def create_basic_knowledge(self):
+        """إنشاء معرفة أساسية"""
+        return {
             "expert_qa": {
-                "برمجة متقدمة": {
-                    "كيف أنشئ API متقدم؟": "لإنشاء API متقدم: 1) استخدم FastAPI أو Flask-RESTful 2) أضف المصادقة JWT 3) نفذ rate limiting 4) وثق API باستخدام Swagger",
-                    "ما هي microservices؟": "هندسة microservices تقسم التطبيق إلى خدمات صغيرة مستقلة، كل خدمة تركز على وظيفة محددة وتتواصل عبر APIs.",
-                    "كيف أحسن أداء قاعدة البيانات؟": "1) فهرسة الجداول 2) استخدم queries فعالة 3) اضبط إعدادات cache 4) استخدم connection pooling",
-                    "ما هو Docker وكيف أستخدمه؟": "Docker نظام containerization يحزم التطبيق واعتماداته في حاوية قابلة للنشر على أي نظام.",
-                    "كيف أنشئ تطبيق تعلم آلي؟": "1) جمع البيانات 2) تنظيف البيانات 3) اختيار النموذج 4) التدريب 5) التقييم 6) النشر"
+                "برمجة": {
+                    "كيف أنشئ API؟": "لإنشاء API: 1) استخدم Flask أو FastAPI 2) أضف endpoints 3) تعامل مع JSON 4) اختبر باستخدام Postman",
+                    "ما هي Python؟": "Python لغة برمجة سهلة التعلم وقوية، تستخدم في الويب، البيانات، الذكاء الاصطناعي، والأتمتة.",
+                    "كيف أتعلم البرمجة؟": "ابدأ بأساسيات Python، ثم تعلم هياكل البيانات، ثم تخصص في مجال يهمك.",
+                    "ما الفرق بين List و Tuple؟": "List قابلة للتعديل، Tuple ثابتة. List تستخدم [] و Tuple تستخدم ()",
+                    "كيف أنشئ موقع ويب؟": "1) HTML للهيكل 2) CSS للتنسيق 3) JavaScript للتفاعل 4) Flask أو Django للخادم"
                 },
-                "أمن سيبراني": {
-                    "كأحمي خادمي؟": "1) تحديث النظام 2) جدار حماية 3) fail2ban 4) تعطيل login بالroot 5) استخدام SSH keys",
-                    "ما هي هجمات DDoS؟": "هجمات الحرمان من الخدمة تهدف لإغراق الخادم بطلبات زائفة لمنع الوصول للخدمة الحقيقية.",
-                    "كيف أكتشف الاختراقات؟": "راقب سجلات النظام، استخدم أنظمة كشف التسلل، افحص العمليات غير المعتادة، تتبع اتصالات الشبكة.",
-                    "ما هو penetration testing؟": "اختبار الاختراق هو محاكاة هجمات حقيقية لاكتشاف الثغرات الأمنية في النظام."
+                "شبكات": {
+                    "ما هو IP؟": "عنوان IP هو عنوان فريد يحدد جهازك على الشبكة.",
+                    "كيف يعمل DNS؟": "DNS يحول أسماء النطاقات (مثل google.com) إلى عناوين IP رقمية.",
+                    "ما الفرق بين TCP و UDP؟": "TCP موثوق مع تأكيد الاستلام، UDP سريع بدون تأكيد.",
+                    "ما هي شبكة LAN؟": "شبكة محلية تربط أجهزة في منطقة صغيرة مثل المنزل أو المكتب.",
+                    "كيف أحمي شبكتي؟": "1) كلمة مرور قوية 2) تحديث البرامج 3) جدار حماية 4) تشفير WiFi"
                 },
-                "ذكاء اصطناعي": {
-                    "ما هو الفرق بين AI و ML؟": "الذكاء الاصطناعي مفهوم أوسع، التعلم الآلي جزء منه يركز على تعلم النماذج من البيانات.",
-                    "كيف أعمل نموذج تعلم عميق؟": "1) TensorFlow/PyTorch 2) بناء architecture 3) تدريب النموذج 4) ضبط hyperparameters 5) التقييم",
-                    "ما هي الشبكات العصبية؟": "محاكاة للدماغ البشري، تتكون من طبقات عصبونية تتعلم الأنماط المعقدة من البيانات."
+                "أنظمة": {
+                    "ما هو Linux؟": "Linux نظام تشغيل مفتوح المصدر، مستقر وآمن، يستخدم في الخوادم.",
+                    "كيف أراقب أداء النظام؟": "استخدم أدوات مثل: top, htop, ps, df -h لمراقبة الموارد.",
+                    "ما هي الحاوية؟": "الحاوية (Container) حزمة تحتوي على تطبيق وكل اعتماداته.",
+                    "كيف أنشئ خادم ويب؟": "1) ثبت Apache أو Nginx 2) ضبط الإعدادات 3) نشر التطبيق 4) تأمين الخادم"
                 }
             },
             "code_templates": {
-                "python_ai_chatbot": """import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import json
-
-class AdvancedChatBot:
-    def __init__(self):
-        self.vectorizer = TfidfVectorizer()
-        self.knowledge_base = {
-            'greetings': ['مرحباً', 'أهلاً', 'اهلاوسهلا'],
-            'questions': {
-                'ما هو اسمك': 'أنا بوت الدردشة الذكي!',
-                'كيف حالك': 'أنا بخير، شكراً لسؤالك!'
+                "python_basic": "print('مرحباً بالعالم!')",
+                "python_web": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef home():\n    return 'مرحباً من Flask!'\n\nif __name__ == '__main__':\n    app.run(debug=True)",
+                "python_data": "import pandas as pd\nimport matplotlib.pyplot as plt\n\ndata = pd.read_csv('data.csv')\nprint(data.head())\ndata.plot()\nplt.show()",
+                "html_basic": "<!DOCTYPE html>\n<html>\n<head>\n    <title>موقعي</title>\n</head>\n<body>\n    <h1>مرحباً!</h1>\n    <p>هذا موقعي الأول</p>\n</body>\n</html>"
             }
         }
     
-    def respond(self, message):
-        # محاكاة ذكاء اصطناعي بسيط
-        if any(greet in message for greet in self.knowledge_base['greetings']):
-            return 'مرحباً بك! كيف يمكنني مساعدتك؟'
-        
-        for question, answer in self.knowledge_base['questions'].items():
-            if question in message:
-                return answer
-        
-        return 'هذا سؤال مثير للاهتمام! دعني أفكر في إجابة مناسبة.'
-
-# استخدام البوت
-bot = AdvancedChatBot()
-print(bot.respond('مرحباً'))""",
-
-                "react_components": """import React, { useState, useEffect } from 'react';
-import './App.css';
-
-function AdvancedApp() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/data')
-      .then(response => response.json())
-      .then(data => {
-        setData(data);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) return <div>جاري التحميل...</div>;
-
-  return (
-    <div className="app">
-      <h1>تطبيق React متقدم</h1>
-      <div className="data-grid">
-        {data.map(item => (
-          <div key={item.id} className="card">
-            <h3>{item.title}</h3>
-            <p>{item.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default AdvancedApp;""",
-
-                "nodejs_api": """const express = require('express');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const app = express();
-
-app.use(express.json());
-
-// قاعدة بيانات مؤقتة
-const users = [];
-const posts = [];
-
-// middleware المصادقة
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'الوصول مرفوض' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'رمز غير صالح' });
-    req.user = user;
-    next();
-  });
-};
-
-// routes
-app.post('/register', async (req, res) => {
-  try {
-    const hashedPassword = await bcrypt.hash(req.body.password, 10);
-    const user = { 
-      id: users.length + 1, 
-      username: req.body.username, 
-      password: hashedPassword 
-    };
-    users.push(user);
-    res.status(201).json({ message: 'تم إنشاء الحساب بنجاح' });
-  } catch {
-    res.status(500).json({ error: 'خطأ في الخادم' });
-  }
-});
-
-app.listen(3000, () => {
-  console.log('الخادم يعمل على port 3000');
-});"""
-            },
-            "learning_paths": {
-                "مطور ويب متكامل": [
-                    "HTML5 & CSS3 المتقدم",
-                    "JavaScript ES6+",
-                    "React أو Vue.js", 
-                    "Node.js و Express",
-                    "قواعد البيانات SQL/NoSQL",
-                    "DevOps والنشر"
-                ],
-                "خبير أمن سيبراني": [
-                    "أساسيات الشبكات",
-                    "أنظمة التشغيل",
-                    "أدوات الأمن",
-                    "اختبار الاختراق",
-                    "تحقيق جرائم رقمية",
-                    "تأمين السحابة"
-                ],
-                "مهندس تعلم آلي": [
-                    "Python للإحصاء",
-                    "رياضيات التعلم الآلي",
-                    "مكتبات ML (scikit-learn)",
-                    "التعلم العميق",
-                    "معالجة اللغة الطبيعية",
-                    "نشر النماذج"
-                ]
-            }
-        }
-        
-        self.save_knowledge(elite_knowledge)
-        return elite_knowledge
-    
-    def save_knowledge(self, knowledge=None):
-        """حفظ المعرفة"""
-        if knowledge is None:
-            knowledge = self.knowledge
-        
-        try:
-            with open('knowledge/elite_knowledge.json', 'w', encoding='utf-8') as f:
-                json.dump(knowledge, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"خطأ في الحفظ: {e}")
-    
-    def web_search_simulation(self, query):
-        """محاكاة بحث ويب ذكي"""
-        search_results = {
-            "أحدث تقنيات البرمجة 2024": "أهم التقنيات: 1) AI-assisted coding 2) Low-code platforms 3) WebAssembly 4) Serverless architecture 5) Edge computing",
-            "مستقبل الذكاء الاصطناعي": "الاتجاهات: 1) Generative AI 2) Multimodal models 3) AI ethics 4) Quantum machine learning 5) Autonomous systems",
-            "أفضل ممارسات الأمن": "1) Zero Trust Architecture 2) Multi-factor authentication 3) Regular security audits 4) Employee training 5) Incident response planning"
-        }
-        
-        for topic, content in search_results.items():
-            if any(word in query for word in topic.split()):
-                return f"🔍 نتائج البحث عن '{query}':\n\n{content}"
-        
-        return f"🔍 لم أجد نتائج دقيقة لـ '{query}'. جرب البحث عن: أحدث تقنيات البرمجة، مستقبل الذكاء الاصطناعي، أو أفضل ممارسات الأمن."
+    def semantic_similarity(self, text1, text2):
+        """تشابه نصي بسيط وفعال"""
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+        common = words1.intersection(words2)
+        return len(common) / max(len(words1), len(words2)) if words1 or words2 else 0
     
     def analyze_sentiment(self, text):
-        """تحليل مشاعر النص"""
+        """تحليل المشاعر"""
         positive_words = ['جيد', 'ممتاز', 'رائع', 'شكرا', 'جميل', 'مذهل']
-        negative_words = ['سيء', 'مشكلة', 'خطأ', 'لا يعمل', 'صعب', 'معقد']
+        negative_words = ['سيء', 'مشكلة', 'خطأ', 'لا يعمل', 'صعب']
         
-        positive_count = sum(1 for word in positive_words if word in text)
-        negative_count = sum(1 for word in negative_words if word in text)
+        positive_count = sum(1 for word in positive_words if word in text.lower())
+        negative_count = sum(1 for word in negative_words if word in text.lower())
         
         if positive_count > negative_count:
             return "إيجابي"
@@ -270,219 +89,148 @@ app.listen(3000, () => {
         else:
             return "محايد"
     
-    def generate_learning_path(self, topic, level="مبتدئ"):
-        """توليد مسار تعلم مخصص"""
+    def find_best_answer(self, question):
+        """إيجاد أفضل إجابة"""
+        best_score = 0
+        best_answer = None
+        
+        for category, qa_pairs in self.knowledge.get("expert_qa", {}).items():
+            for q, a in qa_pairs.items():
+                score = self.semantic_similarity(question, q)
+                if score > best_score and score > 0.3:
+                    best_score = score
+                    best_answer = a
+        
+        return best_answer
+    
+    def generate_learning_path(self, topic):
+        """توليد مسار تعلم"""
         paths = {
-            "برمجة": {
-                "مبتدئ": ["مقدمة في البرمجة", "أساسيات Python", "مشاريع بسيطة", "تعلم Git"],
-                "متوسط": ["هياكل البيانات", "قواعد البيانات", "APIs", "مشاريع متوسطة"],
-                "متقدم": ["هندسة البرمجيات", "التصميم patterns", "الخوارزميات", "مشاريع معقدة"]
-            },
-            "شبكات": {
-                "مبتدئ": ["أساسيات الشبكات", "بروتوكول TCP/IP", "أجهزة الشبكة", "تصميم شبكات صغيرة"],
-                "متوسط": ["شبكات enterprise", "الأمن الشبكي", "بروتوكولات التوجيه", "إدارة الشبكات"],
-                "متقدم": ["شبكات متقدمة", "virtualization", "SDN", "أمن متقدم"]
-            }
+            "برمجة": ["أساسيات البرمجة", "هياكل البيانات", "قواعد البيانات", "تطوير الويب", "مشاريع عملية"],
+            "شبكات": ["أساسيات الشبكات", "بروتوكولات الشبكة", "أجهزة الشبكة", "أمن الشبكات", "شبكات متقدمة"],
+            "أنظمة": ["أساسيات الأنظمة", "إدارة الخوادم", "الأمن النظامي", "الحاويات", "السحابة"]
         }
         
-        if topic in paths and level in paths[topic]:
-            path = paths[topic][level]
-            return f"🎯 مسار تعلم {topic} للمستوى {level}:\n\n" + "\n".join([f"• {item}" for item in path])
-        
-        return f"أستطيع إنشاء مسارات تعلم للبرمجة، الشبكات، الأمن السيبراني، والذكاء الاصطناعي. أي مجال تفضل؟"
+        if topic in paths:
+            return f"🎯 مسار تعلم {topic}:\n\n" + "\n".join([f"• {item}" for item in paths[topic]])
+        return "أستطيع إنشاء مسارات للبرمجة، الشبكات، والأنظمة."
     
     def code_review(self, code):
-        """مراجعة وتحليل الكود"""
+        """مراجعة الكود"""
         issues = []
-        
-        # فحص أخطاء شائعة
-        if "import os" in code and "subprocess" in code:
-            issues.append("⚠️ استخدام مكتبات نظام قد يحتاج تحقق أمني")
         
         if "password" in code.lower() and "encrypt" not in code.lower():
             issues.append("🔒 كلمات المرور يجب تشفيرها")
         
         if "select *" in code.lower():
-            issues.append("🗃️ تجنب SELECT *، حدد الأعمدة المطلوبة فقط")
+            issues.append("🗃️ تجنب SELECT *، حدد الأعمدة المطلوبة")
         
-        if issues:
-            return "🔍 مراجعة الكود:\n" + "\n".join(issues)
-        else:
-            return "✅ الكود يبدو جيداً! لا توجد مشاكل واضحة."
+        if "eval(" in code.lower():
+            issues.append("⚠️ تجنب eval() لأسباب أمنية")
+        
+        return "🔍 مراجعة الكود:\n" + "\n".join(issues) if issues else "✅ الكود يبدو جيداً!"
     
-    def generate_project_idea(self, field, complexity="medium"):
+    def generate_project_idea(self, field):
         """توليد أفكار مشاريع"""
-        projects = {
-            "برمجة": {
-                "easy": ["آلة حاسبة", "قائمة مهام", "محول العملات", "تطبيق طقس"],
-                "medium": ["منصة مدونة", "متجر إلكتروني", "نظام حجوزات", "تطبيق دردشة"],
-                "hard": ["منصة تعلم", "نظام توصيات", "بوت ذكي", "تطبيق تعلم آلي"]
-            },
-            "شبكات": {
-                "easy": ["ماسح شبكة", "أداة ping متقدمة", "محلل حزم بسيط"],
-                "medium": ["جدار حماية", "نظام مراقبة شبكة", "خادم VPN"],
-                "hard": ["نظام كشف تسلل", "شبكة افتراضية", "منصة أمن متكاملة"]
-            }
+        ideas = {
+            "برمجة": ["منصة مدونة", "متجر إلكتروني", "تطبيق مهام", "بوت دردشة", "أداة تحليل بيانات"],
+            "شبكات": ["ماسح شبكة", "مراقب اتصال", "أداة تحليل حزم", "خادم VPN", "نظام مراقبة"],
+            "أنظمة": ["أداة نسخ احتياطي", "مراقب أداء", "مدير عمليات", "منصة نشر", "نظام مراقبة"]
         }
         
-        if field in projects and complexity in projects[field]:
-            ideas = projects[field][complexity]
-            idea = np.random.choice(ideas)
-            return f"💡 فكرة مشروع {field} ({complexity}):\n\n{idea}\n\nمستوى الصعوبة: {complexity}"
-        
-        return "أستطيع اقتراح مشاريع في البرمجة، الشبكات، الأمن، والذكاء الاصطناعي."
+        if field in ideas:
+            import random
+            idea = random.choice(ideas[field])
+            return f"💡 فكرة مشروع {field}: {idea}"
+        return "أستطيع اقتراح مشاريع للبرمجة، الشبكات، والأنظمة."
     
-    def process_advanced_message(self, message, user_id="default"):
-        """معالجة متقدمة للرسائل"""
+    def process_message(self, message, user_id="default"):
+        """معالجة الرسالة الرئيسية"""
         message_lower = message.lower()
+        sentiment = self.analyze_sentiment(message)
         
         # تحديث ملف المستخدم
         self.update_user_profile(user_id, message)
         
-        # تحليل متقدم
-        sentiment = self.analyze_sentiment(message)
-        intent = self.analyze_advanced_intent(message)
+        # البحث عن إجابة
+        answer = self.find_best_answer(message)
+        if answer:
+            response = f"🎯 {answer}"
         
-        # توليد رد متقدم
-        if "ابحث عن" in message or "ما هي آخر" in message:
-            response = self.web_search_simulation(message)
+        elif "مسار تعلم" in message_lower:
+            topic = "برمجة"
+            if "شبكات" in message_lower:
+                topic = "شبكات"
+            elif "أنظمة" in message_lower:
+                topic = "أنظمة"
+            response = self.generate_learning_path(topic)
         
-        elif "مسار تعلم" in message or "كيف أتعلم" in message:
-            topic = self.extract_topic(message)
-            level = "مبتدئ" if "مبتدئ" in message else "متوسط"
-            response = self.generate_learning_path(topic, level)
-        
-        elif "راجع الكود" in message or "حلل الكود" in message:
+        elif "راجع الكود" in message_lower or "حلل الكود" in message_lower:
             code = self.extract_code(message)
             response = self.code_review(code) if code else "أرسل الكود الذي تريد مراجعته"
         
-        elif "فكرة مشروع" in message:
-            field = self.extract_field(message)
-            complexity = "medium"
-            response = self.generate_project_idea(field, complexity)
+        elif "فكرة مشروع" in message_lower:
+            field = "برمجة"
+            if "شبكات" in message_lower:
+                field = "شبكات"
+            elif "أنظمة" in message_lower:
+                field = "أنظمة"
+            response = self.generate_project_idea(field)
         
-        elif "أنشئ لي" in message and "كود" in message:
-            response = self.generate_elite_code(message)
+        elif "أنشئ لي" in message_lower and "كود" in message_lower:
+            response = self.generate_smart_code(message)
+        
+        elif any(word in message_lower for word in ['مرحب', 'اهلا', 'سلام']):
+            response = "مرحباً بك! 👋 أنا النواة الذكية. أستطيع مساعدتك في:\n• البرمجة والتطوير\n• الشبكات والاتصالات\n• إدارة الأنظمة\n• مراجعة الأكواد\n• أفكار المشاريع"
         
         else:
-            # البحث في الأسئلة الخبيرة
-            answer = self.find_expert_answer(message)
-            response = answer if answer else self.generate_creative_response(message, sentiment)
+            response = f"🧠 أفهم أنك تقول: '{message}'\n\nأستطيع المساعدة في:\n• البرمجة (Python, HTML, الخ)\n• الشبكات (IP, DNS, TCP/IP)\n• الأنظمة (Linux, الخوادم)\n• مراجعة الأكواد\n• مسارات التعلم\n\nما المجال الذي تفضله؟"
         
-        # حفظ الذاكرة
-        self.save_to_memory(user_id, message, response, intent, sentiment)
+        # حفظ المحادثة
+        self.save_conversation(user_id, message, response, sentiment)
         
         return {
             "message": response,
             "analysis": {
-                "intent": intent,
                 "sentiment": sentiment,
-                "user_level": self.get_user_level(user_id),
-                "response_type": "advanced_ai"
+                "user_level": self.get_user_level(user_id)
             }
         }
-    
-    def extract_topic(self, message):
-        """استخراج الموضوع من الرسالة"""
-        topics = ["برمجة", "شبكات", "أمن", "ذكاء اصطناعي", "قواعد بيانات"]
-        for topic in topics:
-            if topic in message:
-                return topic
-        return "برمجة"
-    
-    def extract_field(self, message):
-        """استخراج المجال من الرسالة"""
-        fields = ["برمجة", "شبكات", "أمن", "ويب", "جوال"]
-        for field in fields:
-            if field in message:
-                return field
-        return "برمجة"
     
     def extract_code(self, message):
         """استخراج الكود من الرسالة"""
         code_blocks = re.findall(r'```[\w]*\n(.*?)\n```', message, re.DOTALL)
         return code_blocks[0] if code_blocks else None
     
-    def find_expert_answer(self, question):
-        """البحث في الأسئلة الخبيرة"""
-        best_score = 0
-        best_answer = None
-        
-        for category, qa_pairs in self.knowledge["expert_qa"].items():
-            for q, a in qa_pairs.items():
-                score = self.semantic_similarity(question, q)
-                if score > best_score and score > 0.4:
-                    best_score = score
-                    best_answer = f"🎓 {a}"
-        
-        return best_answer
-    
-    def generate_elite_code(self, message):
-        """توليد أكواد النخبة"""
+    def generate_smart_code(self, message):
+        """توليد كود ذكي"""
         message_lower = message.lower()
         
-        if any(word in message_lower for word in ["بوت", "chatbot", "دردشة"]):
-            return f"🤖 كود بوت ذكي متقدم:\n\n```python\n{self.knowledge['code_templates']['python_ai_chatbot']}\n```"
+        if any(word in message_lower for word in ["موقع", "ويب", "web"]):
+            return f"🌐 كود موقع ويب:\n\n```python\n{self.knowledge['code_templates']['python_web']}\n```"
         
-        elif any(word in message_lower for word in ["react", "واجهة", "frontend"]):
-            return f"⚛️ كود React متقدم:\n\n```jsx\n{self.knowledge['code_templates']['react_components']}\n```"
+        elif any(word in message_lower for word in ["بيانات", "تحليل", "data"]):
+            return f"📊 كود تحليل بيانات:\n\n```python\n{self.knowledge['code_templates']['python_data']}\n```"
         
-        elif any(word in message_lower for word in ["api", "خادم", "server"]):
-            return f"🔗 كود Node.js API متقدم:\n\n```javascript\n{self.knowledge['code_templates']['nodejs_api']}\n```"
+        elif any(word in message_lower for word in ["html", "صفحة"]):
+            return f"📄 كود HTML:\n\n```html\n{self.knowledge['code_templates']['html_basic']}\n```"
         
         else:
-            return "أستطيع إنشاء: بوتات ذكية، واجهات React، APIs متقدمة، وأنظمة معقدة. ما الذي تريد بالضبط؟"
-    
-    def generate_creative_response(self, message, sentiment):
-        """توليد ردود إبداعية"""
-        creative_responses = [
-            "🤔 هذا سؤال عميق! دعني أفكر في أفضل طريقة للإجابة...",
-            "🎯 أرى أنك تبحث عن معرفة متقدمة. هذا ممتاز!",
-            "💡 فكرة رائعة! هل تريدني أن أعمق أكثر في هذا الموضوع؟",
-            "🚀 هذا يذكرني بتقنيات متقدمة في المجال. هل تريد استكشافها؟",
-            "🔍 سأبحث في أحدث التطورات حول هذا الموضوع وأعود إليك بمعلومات شاملة."
-        ]
-        
-        return np.random.choice(creative_responses) + f"\n\n(تحليل المشاعر: {sentiment})"
-    
-    def analyze_advanced_intent(self, message):
-        """تحليل النية المتقدم"""
-        message_lower = message.lower()
-        
-        if any(word in message_lower for word in ["ابحث", "أخبار", "جديد", "مستجد"]):
-            return "بحث_معلومات"
-        elif any(word in message_lower for word in ["مسار", "تعلم", "كورس", "دورة"]):
-            return "تعلم_وتطوير"
-        elif any(word in message_lower for word in ["راجع", "حلل", "افحص", "كود"]):
-            return "مراجعة_كود"
-        elif any(word in message_lower for word in ["مشروع", "فكرة", "بناء", "أنشئ"]):
-            return "إبداع_مشاريع"
-        elif any(word in message_lower for word in ["كود", "برمجة", "سكريبت"]):
-            return "توليد_كود"
-        else:
-            return "استفسار_عام"
+            return f"💻 كود Python أساسي:\n\n```python\n{self.knowledge['code_templates']['python_basic']}\n```"
     
     def update_user_profile(self, user_id, message):
-        """تحديث ملف المستخدم المتقدم"""
+        """تحديث ملف المستخدم"""
         if user_id not in self.user_profiles:
             self.user_profiles[user_id] = {
                 "join_date": datetime.now().isoformat(),
                 "interaction_count": 0,
-                "expertise_areas": [],
-                "preferred_complexity": "medium",
-                "learning_goals": [],
+                "interests": [],
                 "last_activity": datetime.now().isoformat()
             }
         
         profile = self.user_profiles[user_id]
         profile["interaction_count"] += 1
         profile["last_activity"] = datetime.now().isoformat()
-        
-        # تحديث مجالات الخبرة
-        areas = ["برمجة", "شبكات", "أمن", "ذكاء اصطناعي", "قواعد بيانات"]
-        for area in areas:
-            if area in message and area not in profile["expertise_areas"]:
-                profile["expertise_areas"].append(area)
     
     def get_user_level(self, user_id):
         """تحديد مستوى المستخدم"""
@@ -490,48 +238,26 @@ app.listen(3000, () => {
             return "مبتدئ"
         
         interactions = self.user_profiles[user_id]["interaction_count"]
-        if interactions > 50:
+        if interactions > 20:
             return "خبير"
-        elif interactions > 20:
+        elif interactions > 10:
             return "متوسط"
         else:
             return "مبتدئ"
     
-    def save_to_memory(self, user_id, user_message, ai_response, intent, sentiment):
-        """حفظ في الذاكرة المتقدمة"""
-        memory_entry = {
+    def save_conversation(self, user_id, user_message, response, sentiment):
+        """حفظ المحادثة"""
+        conversation = {
             "timestamp": datetime.now().isoformat(),
-            "user_id": user_id,
             "user_message": user_message,
-            "ai_response": ai_response,
-            "intent": intent,
-            "sentiment": sentiment,
-            "user_level": self.get_user_level(user_id)
+            "response": response,
+            "sentiment": sentiment
         }
         
-        self.conversation_memory.append(memory_entry)
-        
-        # حفظ الذاكرة للملف
-        try:
-            with open(f'memory/{user_id}_memory.json', 'w', encoding='utf-8') as f:
-                json.dump(self.conversation_memory[-100:], f, ensure_ascii=False, indent=2)
-        except:
-            pass
-    
-    def semantic_similarity(self, text1, text2):
-        """التشابه الدلالي"""
-        if not MODEL_LOADED:
-            words1 = set(text1.lower().split())
-            words2 = set(text2.lower().split())
-            common = words1.intersection(words2)
-            return len(common) / max(len(words1), len(words2))
-        
-        emb1 = semantic_model.encode(text1, convert_to_tensor=True)
-        emb2 = semantic_model.encode(text2, convert_to_tensor=True)
-        return util.pytorch_cos_sim(emb1, emb2).item()
+        self.conversation_memory.append(conversation)
 
-# تهيئة النواة المتطورة
-ai_core = EliteAICore()
+# تهيئة النواة
+ai_core = SmartAICore()
 
 @app.route('/')
 def home():
@@ -547,55 +273,31 @@ def chat_api():
         if not user_message:
             return jsonify({'error': 'لا يوجد رسالة'}), 400
         
-        # معالجة متقدمة
-        result = ai_core.process_advanced_message(user_message, user_id)
+        result = ai_core.process_message(user_message, user_id)
         
         return jsonify({
             'response': result['message'],
             'analysis': result['analysis'],
-            'model_loaded': MODEL_LOADED,
             'timestamp': datetime.now().isoformat()
         })
         
     except Exception as e:
-        logging.error(f"خطأ في المعالجة المتقدمة: {e}")
-        return jsonify({'error': 'حدث خطأ في المعالجة'}), 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/user/profile/<user_id>')
+@app.route('/api/user/<user_id>')
 def get_user_profile(user_id):
     """الحصول على ملف المستخدم"""
     profile = ai_core.user_profiles.get(user_id, {})
     return jsonify({
         'profile': profile,
-        'level': ai_core.get_user_level(user_id),
-        'total_interactions': len(ai_core.conversation_memory)
+        'level': ai_core.get_user_level(user_id)
     })
-
-@app.route('/api/learning/path')
-def get_learning_path():
-    """الحصول على مسار تعلم"""
-    topic = request.args.get('topic', 'برمجة')
-    level = request.args.get('level', 'مبتدئ')
-    
-    path = ai_core.generate_learning_path(topic, level)
-    return jsonify({'learning_path': path})
-
-@app.route('/api/project/idea')
-def get_project_idea():
-    """الحصول على فكرة مشروع"""
-    field = request.args.get('field', 'برمجة')
-    complexity = request.args.get('complexity', 'medium')
-    
-    idea = ai_core.generate_project_idea(field, complexity)
-    return jsonify({'project_idea': idea})
 
 @app.route('/health')
 def health_check():
-    """فحص صحة النظام"""
     return jsonify({
         'status': 'running',
-        'model_loaded': MODEL_LOADED,
-        'version': 'elite_2.0.0',
+        'version': 'smart_1.0',
         'timestamp': datetime.now().isoformat()
     })
 
