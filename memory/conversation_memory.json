@@ -1,1 +1,9 @@
-
+{
+  "conversations": [],
+  "statistics": {
+    "total_conversations": 0,
+    "last_reset": "2024-01-01",
+    "most_common_intent": "general"
+  },
+  "user_sessions": {}
+}
