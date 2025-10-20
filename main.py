@@ -1,123 +1,117 @@
 #!/usr/bin/env python3
 # النواة الذكية المتقدمة - AI Core Engine
-# نظام متكامل للذكاء الاصطناعي، البرمجة، الشبكات، والأنظمة
+# نسخة متوافقة مع Android
 
 import os
 import sys
 import logging
+import json
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template
 
 # إضافة المسارات للمشروع
-sys.path.append(os.path.join(os.path.dirname(__file__), 'core'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'tools'))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'core'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'modules'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tools'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 
-from core.brain import AICoreBrain
-from utils.logger import setup_logging
+try:
+    from core.brain import AICoreBrain
+    from utils.logger import setup_logging
+except ImportError as e:
+    print(f"خطأ في استيراد المكتبات: {e}")
+    # سننشئ البدائل الأساسية
 
-app = Flask(__name__)
-ai_core = AICoreBrain()
+class BasicAICore:
+    def __init__(self):
+        self.setup_directories()
+        self.load_knowledge()
+        
+    def setup_directories(self):
+        """إنشاء المجلدات الضرورية"""
+        dirs = ['knowledge', 'memory', 'logs']
+        for dir_name in dirs:
+            os.makedirs(dir_name, exist_ok=True)
+    
+    def load_knowledge(self):
+        """تحميل قاعدة المعرفة"""
+        try:
+            with open('knowledge/knowledge_base.json', 'r', encoding='utf-8') as f:
+                self.knowledge = json.load(f)
+        except:
+            self.knowledge = {
+                "greetings": ["مرحباً!", "أهلاً وسهلاً!", "مرحباً بك في النواة الذكية"],
+                "help": "أستطيع مساعدتك في البرمجة، الشبكات، الأنظمة، والأمن السيبراني"
+            }
+    
+    def process_message(self, message):
+        """معالجة الرسالة الأساسية"""
+        message_lower = message.lower()
+        
+        if any(word in message_lower for word in ['مرحب', 'اهلا', 'سلام']):
+            return "مرحباً بك! 👋 أنا النواة الذكية. كيف يمكنني مساعدتك اليوم؟"
+        
+        elif any(word in message_lower for word in ['برمجة', 'كود', 'code']):
+            return "أستطيع مساعدتك في كتابة الأكواد. أخبرني ما الذي تريد برمجته؟"
+        
+        elif any(word in message_lower for word in ['شبكة', 'network']):
+            return "مجال الشبكات متاح! يمكنني شرح المفاهيم أو مساعدتك في تحليل الشبكات."
+        
+        elif any(word in message_lower for word in ['نظام', 'system']):
+            return "إدارة الأنظمة؟ ممتاز! أستطيع مساعدتك في تحليل وإدارة الأنظمة."
+        
+        elif any(word in message_lower for word in ['أمن', 'security']):
+            return "الأمن السيبراني مجال مهم! كيف يمكنني مساعدتك في تأمين أنظمتك؟"
+        
+        else:
+            return f"أفهم أنك تقول: '{message}'. دعني أساعدك في:\n- البرمجة والتطوير\n- الشبكات والاتصالات\n- إدارة الأنظمة\n- الأمن السيبراني\n\nأي مجال تفضل؟"
 
-@app.route('/')
-def home():
-    """الصفحة الرئيسية"""
-    return render_template('index.html')
-
-@app.route('/api/chat', methods=['POST'])
-def chat():
-    """واجهة المحادثة مع النواة الذكية"""
+def main():
+    """الدالة الرئيسية للتشغيل على Android"""
+    print("=" * 50)
+    print("🚀 النواة الذكية المتقدمة - AI Core Engine")
+    print("📱 نسخة متوافقة مع Samsung S24 Ultra")
+    print("=" * 50)
+    print("\nالمجالات المتاحة:")
+    print("🔹 البرمجة وتطوير الأكواد")
+    print("🔹 الشبكات والاتصالات") 
+    print("🔹 إدارة الأنظمة")
+    print("🔹 الأمن السيبراني")
+    print("🔹 إدارة المشاريع")
+    print("=" * 50)
+    print("اكتب 'خروج' للإنهاء")
+    print("=" * 50)
+    
     try:
-        data = request.get_json()
-        user_message = data.get('message', '')
-        user_id = data.get('user_id', 'default')
-        
-        if not user_message:
-            return jsonify({'error': 'لا يوجد رسالة'}), 400
-        
-        # معالجة الرسالة عبر النواة الذكية
-        response = ai_core.process_message(user_message, user_id)
-        
-        return jsonify({
-            'response': response['message'],
-            'type': response['type'],
-            'suggestions': response.get('suggestions', []),
-            'code': response.get('code', ''),
-            'execution_result': response.get('execution_result', '')
-        })
-        
-    except Exception as e:
-        logging.error(f"خطأ في معالجة الرسالة: {e}")
-        return jsonify({'error': 'حدث خطأ في المعالجة'}), 500
+        ai_core = AICoreBrain()
+        print("✅ النواة المتقدمة جاهزة!")
+    except:
+        ai_core = BasicAICore()
+        print("✅ النواة الأساسية جاهزة!")
+    
+    while True:
+        try:
+            user_input = input("\n👤 أنت: ").strip()
+            
+            if user_input.lower() in ['خروج', 'exit', 'quit']:
+                print("👋 مع السلامة! إلى اللقاء.")
+                break
+                
+            if not user_input:
+                continue
+                
+            # معالجة الرسالة
+            if hasattr(ai_core, 'process_message'):
+                response = ai_core.process_message(user_input)
+            else:
+                response = "النظام قيد التطوير..."
+                
+            print(f"🤖 النواة: {response}")
+            
+        except KeyboardInterrupt:
+            print("\n\n⏹️ تم إيقاف البرنامج")
+            break
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
 
-@app.route('/api/code/generate', methods=['POST'])
-def generate_code():
-    """توليد كود بناءً على الطلب"""
-    try:
-        data = request.get_json()
-        requirements = data.get('requirements', '')
-        language = data.get('language', 'python')
-        
-        code = ai_core.generate_code(requirements, language)
-        
-        return jsonify({
-            'code': code['code'],
-            'explanation': code['explanation'],
-            'language': code['language']
-        })
-        
-    except Exception as e:
-        logging.error(f"خطأ في توليد الكود: {e}")
-        return jsonify({'error': 'حدث خطأ في توليد الكود'}), 500
-
-@app.route('/api/system/analyze', methods=['POST'])
-def analyze_system():
-    """تحليل النظام"""
-    try:
-        data = request.get_json()
-        system_type = data.get('system_type', 'general')
-        
-        analysis = ai_core.analyze_system(system_type)
-        
-        return jsonify(analysis)
-        
-    except Exception as e:
-        logging.error(f"خطأ في تحليل النظام: {e}")
-        return jsonify({'error': 'حدث خطأ في تحليل النظام'}), 500
-
-@app.route('/api/network/scan', methods=['POST'])
-def network_scan():
-    """مسح الشبكة"""
-    try:
-        data = request.get_json()
-        target = data.get('target', 'localhost')
-        
-        scan_result = ai_core.network_scan(target)
-        
-        return jsonify(scan_result)
-        
-    except Exception as e:
-        logging.error(f"خطأ في مسح الشبكة: {e}")
-        return jsonify({'error': 'حدث خطأ في مسح الشبكة'}), 500
-
-@app.route('/api/project/create', methods=['POST'])
-def create_project():
-    """إنشاء مشروع جديد"""
-    try:
-        data = request.get_json()
-        project_name = data.get('project_name', '')
-        project_type = data.get('project_type', 'web')
-        
-        project = ai_core.create_project(project_name, project_type)
-        
-        return jsonify(project)
-        
-    except Exception as e:
-        logging.error(f"خطأ في إنشاء المشروع: {e}")
-        return jsonify({'error': 'حدث خطأ في إنشاء المشروع'}), 500
-
-if __name__ == '__main__':
-    setup_logging()
-    logging.info("🚀 تشغيل النواة الذكية المتقدمة...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == "__main__":
+    main()
