@@ -1,423 +1,279 @@
 #!/usr/bin/env python3
-# النواة الذكية المتقدمة - إصدار محسّن
+# النواة الذكية المتقدمة - إصدار مع دمج نموذج Hugging Face + حماية وأخطاء
 
-import os
-import json
-import re
+import os, json, re, time
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
+import requests
+
+HF_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # تأكد أنه مضاف في Render
+# موديلات عامة تعمل عبر Inference API (اختر واحد)
+DEFAULT_HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
+# مهلة الشبكة حتى لا تتجمد النواة
+HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "35"))
 
 app = Flask(__name__)
 
+# ====== طبقة الاتصال بـ Hugging Face ======
+def hf_generate(prompt: str,
+                model: str = DEFAULT_HF_MODEL,
+                max_new_tokens: int = 256,
+                temperature: float = 0.4,
+                retries: int = 2) -> str:
+    """
+    تستدعي نموذج Hugging Face مع تخفيض المخاطر:
+    - قراءة المفتاح من البيئة فقط
+    - مهلات + محاولات إعادة
+    - رسائل خطأ واضحة بدون إسقاط الخدمة
+    """
+    if not HF_API_KEY:
+        return "⚠️ مفتاح HUGGINGFACE_API_KEY غير موجود في البيئة."
+
+    url = f"https://api-inference.huggingface.co/models/{model}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    payload = {
+        "inputs": f"### Instruction:\n{prompt}\n\n### Response:",
+        "parameters": {
+            "max_new_tokens": max_new_tokens,
+            "temperature": temperature,
+            "return_full_text": False
+        }
+    }
+
+    last_err = None
+    for _ in range(retries + 1):
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=HTTP_TIMEOUT)
+            # 503 تعني أن الموديل يحمّل للمرة الأولى؛ ننتظر قليلاً ثم نكرر
+            if r.status_code in (503, 524):
+                last_err = f"Model warming up (status {r.status_code})"
+                time.sleep(3)
+                continue
+            if r.status_code == 401:
+                return "⛔ مفتاح Hugging Face غير صالح أو الصلاحيات غير كافية."
+            r.raise_for_status()
+            data = r.json()
+            # صيغ الاستجابة تختلف باختلاف الموديل؛ نتعامل مع الأكثر شيوعًا
+            if isinstance(data, list) and data and "generated_text" in data[0]:
+                return data[0]["generated_text"].strip()
+            if isinstance(data, dict) and "generated_text" in data:
+                return data["generated_text"].strip()
+            # في بعض الأحيان تكون الاستجابة قائمة من dicts داخلها 'generated_token_count' فقط
+            return json.dumps(data, ensure_ascii=False)[:2000]
+        except requests.exceptions.Timeout:
+            last_err = "⏳ انتهت مهلة الاتصال بالموديل."
+        except Exception as e:
+            last_err = f"❗ خطأ أثناء الاتصال بالموديل: {e}"
+        time.sleep(1)
+
+    return last_err or "⚠️ تعذّر الحصول على استجابة من الموديل."
+
+# ====== النواة المنطقية المحلية ======
 class SmartAICore:
     def __init__(self):
         self.setup_directories()
         self.load_knowledge()
         self.conversation_memory = []
-        
+
     def setup_directories(self):
-        """إنشاء المجلدات الأساسية"""
         os.makedirs('knowledge', exist_ok=True)
         os.makedirs('memory', exist_ok=True)
-    
+
     def load_knowledge(self):
-        """تحميل المعرفة"""
         try:
             with open('knowledge/elite_knowledge.json', 'r', encoding='utf-8') as f:
                 self.knowledge = json.load(f)
-        except:
+        except Exception:
             self.knowledge = self.create_basic_knowledge()
-    
+
     def create_basic_knowledge(self):
-        """إنشاء معرفة أساسية"""
         return {
             "expert_qa": {
                 "برمجة": {
-                    "كيف أنشئ API؟": "لإنشاء API: 1) استخدم Flask 2) أضف routes 3) تعامل مع JSON 4) اختبر API",
-                    "ما هي Python؟": "لغة برمجة سهلة وقوية للويب، البيانات، والذكاء الاصطناعي",
-                    "كيف أبدأ البرمجة؟": "ابدأ بPython، ثم هياكل البيانات، ثم تخصص في مجال"
+                    "كيف أنشئ API؟": "Flask → routes → JSON → test",
+                    "ما هي Python؟": "لغة برمجة قوية وبسيطة للويب والبيانات وAI",
+                    "كيف أبدأ البرمجة؟": "ابدأ بـ Python ثم هياكل البيانات ثم تخصّص"
                 }
             },
             "code_templates": {
                 "python_basic": "print('مرحباً بالعالم!')",
-                "python_web": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef home():\n    return 'مرحباً!'\n\nif __name__ == '__main__':\n    app.run(debug=True)",
-                "python_calculator": "def add(a, b): return a + b\ndef subtract(a, b): return a - b\nprint(add(5, 3))"
+                "python_web": "from flask import Flask\napp = Flask(__name__)\n@app.route('/')\ndef home():\n    return 'مرحباً!'\n\nif __name__=='__main__':\n    app.run()",
+                "python_calculator": "def add(a,b): return a+b\nprint(add(5,3))"
             }
         }
-    
+
     def process_message(self, message, user_id="default"):
-        """معالجة الرسالة - النسخة المحسنة"""
-        message_lower = message.lower().strip()
-        
-        print(f"🔍 معالجة الرسالة: '{message}'")  # للتdebug
-        
-        # طلبات الأكواد - أولوية عالية
-        if any(word in message_lower for word in ["انشئ", "اصنع", "أنشئ لي", "اكتب", "مثّل", "كود", "برمجة", "بايثون", "python"]):
-            if any(word in message_lower for word in ["حساب", "جمع", "طرح", "آلة حاسبة", "calculator"]):
+        msg = message.lower().strip()
+        # مشغل صريح للنموذج السحابي
+        # أمثلة: "نموذج: اكتب رسالة ترحيب" أو "model: summarize ..."
+        if msg.startswith("نموذج:") or msg.startswith("model:") or "جرّب الموديل" in msg or "شغّل النموذج" in msg:
+            pure = message.split(":", 1)[1].strip() if ":" in message else message
+            return hf_generate(pure)
+
+        # كلمات مفتاحية → كود جاهز
+        if any(w in msg for w in ["انشئ", "اصنع", "اكتب", "كود", "python", "بايثون"]):
+            if any(w in msg for w in ["حساب", "جمع", "طرح", "آلة حاسبة", "calculator"]):
                 return self.generate_calculator()
-            elif any(word in message_lower for word in ["موقع", "ويب", "web", "فلاسك", "flask"]):
+            elif any(w in msg for w in ["موقع", "ويب", "web", "فلاسك", "flask"]):
                 return self.generate_web_app()
-            elif any(word in message_lower for word in ["بوت", "دردشة", "chatbot"]):
+            elif any(w in msg for w in ["بوت", "دردشة", "chatbot"]):
                 return self.generate_chatbot()
-            elif any(word in message_lower for word in ["بيانات", "data", "تحليل"]):
+            elif any(w in msg for w in ["بيانات", "data", "تحليل"]):
                 return self.generate_data_analysis()
             else:
                 return self.generate_basic_code()
-        
-        # مسارات التعلم
-        elif any(word in message_lower for word in ["مسار", "مسارات", "تعلم", "تعليم", "كيف اتعلم"]):
+
+        if any(w in msg for w in ["مسار", "تعلم", "تعليم"]):
             return self.generate_learning_path()
-        
-        # مراجعة الأكواد
-        elif any(word in message_lower for word in ["راجع", "حلل", "افحص الكود"]):
+
+        if any(w in msg for w in ["راجع", "حلل", "افحص الكود"]):
             code = self.extract_code(message)
             return self.code_review(code) if code else "📝 أرسل الكود الذي تريد مراجعته بين ```"
-        
-        # أفكار مشاريع
-        elif any(word in message_lower for word in ["فكرة", "مشروع", "مقترح"]):
+
+        if any(w in msg for w in ["فكرة", "مشروع", "مقترح"]):
             return self.generate_project_idea()
-        
-        # تحليل المشاعر
-        elif any(word in message_lower for word in ["شعور", "مشاعر", "رأيك"]):
-            sentiment = self.analyze_sentiment(message)
-            return f"🎭 تحليل المشاعر: {sentiment}"
-        
-        # البحث
-        elif any(word in message_lower for word in ["ابحث", "بحث", "معلومات عن"]):
+
+        if any(w in msg for w in ["شعور", "مشاعر", "رأيك"]):
+            return f"🎭 تحليل المشاعر: {self.analyze_sentiment(message)}"
+
+        if any(w in msg for w in ["ابحث", "بحث", "معلومات عن"]):
             return self.web_search(message)
-        
-        # الترحيب
-        elif any(word in message_lower for word in ["مرحب", "اهلا", "سلام", "hello", "hi"]):
+
+        if any(w in msg for w in ["مرحب", "اهلا", "سلام", "hello", "hi"]):
             return self.get_welcome_message()
-        
-        # الرد الذكي البديل
-        else:
-            return self.generate_smart_response(message)
-    
+
+        # الافتراضي: جرّب الموديل السحابي أولًا، ثم سقط على رد محلي
+        cloud = hf_generate(message)
+        if cloud and not cloud.startswith(("⚠️", "⛔", "❗", "⏳")):
+            return cloud
+        return self.generate_smart_response(message)
+
+    # ======= باقي مولدات الكود/المحتوى (بدون تغيير جوهري) =======
     def generate_calculator(self):
-        """توليد كود آلة حاسبة"""
-        code = """# 🧮 آلة حاسبة متقدمة
+        code = """class Calculator:
+    def __init__(self): self.history=[]
+    def add(self,a,b): r=a+b; self.history.append(f"{a}+{b}={r}"); return r
+    def subtract(self,a,b): r=a-b; self.history.append(f"{a}-{b}={r}"); return r
+    def multiply(self,a,b): r=a*b; self.history.append(f"{a}×{b}={r}"); return r
+    def divide(self,a,b):
+        if b==0: return "خطأ: قسمة على صفر"
+        r=a/b; self.history.append(f"{a}÷{b}={r}"); return r
+    def show_history(self): print("\\n".join(self.history))
 
-class Calculator:
-    def __init__(self):
-        self.history = []
-    
-    def add(self, a, b):
-        result = a + b
-        self.history.append(f"{a} + {b} = {result}")
-        return result
-    
-    def subtract(self, a, b):
-        result = a - b
-        self.history.append(f"{a} - {b} = {result}")
-        return result
-    
-    def multiply(self, a, b):
-        result = a * b
-        self.history.append(f"{a} × {b} = {result}")
-        return result
-    
-    def divide(self, a, b):
-        if b == 0:
-            return "خطأ: لا يمكن القسمة على صفر!"
-        result = a / b
-        self.history.append(f"{a} ÷ {b} = {result}")
-        return result
-    
-    def show_history(self):
-        for operation in self.history:
-            print(operation)
+calc=Calculator(); print("10+5=",calc.add(10,5)); calc.show_history()"""
+        return f"🧮 كود آلة حاسبة:\n\n```python\n{code}\n```"
 
-# الاستخدام
-calc = Calculator()
-print("10 + 5 =", calc.add(10, 5))
-print("10 × 3 =", calc.multiply(10, 3))
-calc.show_history()
-"""
-        return f"🧮 كود آلة حاسبة متقدمة:\n\n```python\n{code}\n```"
-    
     def generate_web_app(self):
-        """توليد كود تطبيق ويب"""
-        code = """from flask import Flask, render_template, request
-
-app = Flask(__name__)
-
+        code = """from flask import Flask
+app=Flask(__name__)
 @app.route('/')
 def home():
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>تطبيقي</title>
-        <style>
-            body { font-family: Arial; margin: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>مرحباً بك! 🌟</h1>
-            <p>هذا تطبيق ويب يعمل بـ Flask</p>
-        </div>
-    </body>
-    </html>
-    '''
+    return '<h1>مرحباً بك! 🌟</h1><p>هذا تطبيق Flask بسيط.</p>'
+if __name__=='__main__': app.run()"""
+        return f"🌐 كود تطبيق ويب:\n\n```python\n{code}\n```"
 
-@app.route('/api/data')
-def get_data():
-    return {"message": "مرحباً من API!", "status": "success"}
-
-if __name__ == '__main__':
-    app.run(debug=True)
-"""
-        return f"🌐 كود تطبيق ويب كامل:\n\n```python\n{code}\n```"
-    
     def generate_chatbot(self):
-        """توليد كود بوت دردشة"""
         code = """class ChatBot:
     def __init__(self):
-        self.responses = {
-            'مرحباً': 'أهلاً وسهلاً! كيف يمكنني مساعدتك؟',
-            'كيف الحال': 'أنا بخير، شكراً لسؤالك! 😊',
-            'ما اسمك': 'أنا بوت الدردشة الذكي!',
-            'مساعدة': 'أستطيع الإجابة على أسئلتك والتحدث معك.',
-            'وداعاً': 'مع السلامة! كان حديثاً ممتعاً 🫡'
-        }
-    
-    def respond(self, message):
-        message_lower = message.lower()
-        
-        for pattern, response in self.responses.items():
-            if pattern in message_lower:
-                return response
-        
-        return 'هذا مثير للاهتمام! هل يمكنك شرح المزيد؟'
+        self.responses={'مرحباً':'أهلاً وسهلاً!','كيف الحال':'أنا بخير 😊','ما اسمك':'أنا بوت الدردشة!','وداعاً':'مع السلامة!'}
+    def respond(self,msg):
+        m=msg.lower()
+        for k,v in self.responses.items():
+            if k in m: return v
+        return 'هل توضح سؤالك أكثر؟'
+bot=ChatBot(); print(bot.respond('مرحباً'))"""
+        return f"🤖 كود بوت دردشة:\n\n```python\n{code}\n```"
 
-# استخدام البوت
-bot = ChatBot()
-print(bot.respond('مرحباً'))
-print(bot.respond('كيف الحال؟'))
-"""
-        return f"🤖 كود بوت دردشة ذكي:\n\n```python\n{code}\n```"
-    
     def generate_data_analysis(self):
-        """توليد كود تحليل بيانات"""
-        code = """import pandas as pd
-import matplotlib.pyplot as plt
-
-# بيانات مثال
-data = {
-    'الشهر': ['يناير', 'فبراير', 'مارس', 'أبريل'],
-    'المبيعات': [120, 150, 180, 200],
-    'العملاء': [50, 65, 80, 95]
-}
-
-df = pd.DataFrame(data)
-print("📊 البيانات:")
-print(df)
-
-print("\\n📈 الإحصائيات:")
-print(df.describe())
-
-# رسم بياني
-plt.figure(figsize=(10, 6))
-plt.plot(df['الشهر'], df['المبيعات'], marker='o', label='المبيعات')
-plt.plot(df['الشهر'], df['العملاء'], marker='s', label='العملاء')
-plt.title('تحليل الأداء')
-plt.xlabel('الشهر')
-plt.ylabel('القيمة')
-plt.legend()
-plt.grid(True)
-plt.show()
-"""
+        code = """import pandas as pd, matplotlib.pyplot as plt
+df=pd.DataFrame({'الشهر':['يناير','فبراير','مارس','أبريل'],'المبيعات':[120,150,180,200]})
+print(df); print(df.describe()); df.plot(x='الشهر',y='المبيعات',marker='o'); plt.show()"""
         return f"📊 كود تحليل بيانات:\n\n```python\n{code}\n```"
-    
+
     def generate_basic_code(self):
-        """توليد كود أساسي"""
-        code = """# 🐍 كود Python مفيد
-
-# 1. العمليات الحسابية
-def calculate(a, b):
-    print(f"{a} + {b} = {a + b}")
-    print(f"{a} - {b} = {a - b}")
-    print(f"{a} × {b} = {a * b}")
-    if b != 0:
-        print(f"{a} ÷ {b} = {a / b}")
-
-# 2. إدارة القوائم
-fruits = ['تفاح', 'موز', 'برتقال']
-print("الفواكه:", fruits)
-fruits.append('فراولة')
-print("بعد الإضافة:", fruits)
-
-# 3. العمل مع الملفات
-with open('example.txt', 'w', encoding='utf-8') as f:
-    f.write('مرحباً بالعالم!\\n')
-
-# التشغيل
-calculate(10, 5)
-"""
+        code = """def calculate(a,b):
+    print(f"{a}+{b}={a+b}"); print(f"{a}-{b}={a-b}"); print(f"{a}×{b}={a*b}")
+    if b!=0: print(f"{a}÷{b}={a/b}")
+with open('example.txt','w',encoding='utf-8') as f: f.write('مرحباً!\\n')
+calculate(10,5)"""
         return f"💻 كود Python أساسي:\n\n```python\n{code}\n```"
-    
+
     def generate_learning_path(self):
-        """توليد مسار تعلم"""
-        path = """🎯 مسار تعلم البرمجة المتكامل:
+        return "🎯 مسار تعلم: أساسيات Python → هياكل البيانات → OOP → Flask/APIs → قواعد بيانات → مشاريع عملية"
 
-1️⃣ **المستوى المبتدئ:**
-   • أساسيات Python (المتغيرات، الشروط، الحلقات)
-   • هياكل البيانات (List, Dictionary, Tuple, Set)
-   • الدوال ووحدات Python
-
-2️⃣ **المستوى المتوسط:**
-   • البرمجة كائنية التوجه (OOP)
-   • العمل مع الملفات والقواعد البيانية
-   • واجهات برمجة التطبيقات (APIs)
-   • إطار العمل Flask
-
-3️⃣ **المستوى المتقدم:**
-   • الخوارزميات وهياكل البيانات المتقدمة
-   • التصميم patterns
-   • testing والجودة
-   • DevOps والنشر
-
-💡 **نصيحة:** ابدأ بمشاريع صغيرة وتدرج إلى مشاريع أكبر!"""
-        return path
-    
     def code_review(self, code):
-        """مراجعة الكود"""
-        issues = []
-        
-        if "password" in code.lower() and "encrypt" not in code.lower():
-            issues.append("🔒 كلمات المرور يجب تشفيرها")
-        
-        if "select *" in code.lower():
-            issues.append("🗃️ تجنب SELECT *، حدد الأعمدة المطلوبة")
-        
-        if "eval(" in code.lower():
-            issues.append("⚠️ تجنب eval() لأسباب أمنية")
-        
-        if "hardcode" in code.lower():
-            issues.append("📝 تجنب القيم الثابتة، استخدم متغيرات")
-        
-        return "🔍 مراجعة الكود:\n" + "\n".join(issues) if issues else "✅ الكود يبدو جيداً! لا توجد مشاكل واضحة."
-    
+        issues=[]
+        if not code: return "أرسل الكود بين ```"
+        low=code.lower()
+        if "password" in low and "encrypt" not in low: issues.append("🔒 شفّر كلمات المرور.")
+        if "select *" in low: issues.append("🗃️ تجنّب SELECT *.")
+        if "eval(" in low: issues.append("⚠️ تجنّب eval().")
+        return "🔍 مراجعة الكود:\n" + ("\n".join(issues) if issues else "✅ لا مشاكل واضحة.")
+
     def generate_project_idea(self):
-        """توليد فكرة مشروع"""
-        ideas = [
-            "💡 نظام إدارة المهام اليومية",
-            "💡 تطبيق قائمة التسوق الذكية", 
-            "💡 منصة مدونة شخصية",
-            "💡 أداة تحويل العملات",
-            "💡 تطبيق تنبيهات الطقس",
-            "💡 نظام حجز مواعيد",
-            "💡 أداة تحليل النصوص",
-            "💡 مسجل المصروفات الشهرية"
-        ]
-        import random
-        return random.choice(ideas) + "\n\n🚀 الميزات: واجهة مستخدم، حفظ البيانات، تقارير، إشعارات"
-    
+        return "💡 فكرة: نظام مهام مع إشعارات وتقرير أسبوعي."
+
     def analyze_sentiment(self, text):
-        """تحليل المشاعر"""
-        positive = ['جيد', 'ممتاز', 'رائع', 'شكرا', 'جميل', 'مذهل']
-        negative = ['سيء', 'مشكلة', 'خطأ', 'لا يعمل', 'صعب']
-        
-        pos_count = sum(1 for word in positive if word in text.lower())
-        neg_count = sum(1 for word in negative if word in text.lower())
-        
-        if pos_count > neg_count: return "إيجابي 😊"
-        elif neg_count > pos_count: return "سلبي 😔"
-        else: return "محايد 😐"
-    
+        pos = any(w in text for w in ['جيد','ممتاز','رائع','جميل'])
+        neg = any(w in text for w in ['سيء','مشكلة','خطأ','لا يعمل'])
+        if pos and not neg: return "إيجابي 😊"
+        if neg and not pos: return "سلبي 😔"
+        return "محايد 😐"
+
     def web_search(self, query):
-        """محاكاة بحث ويب"""
-        topics = {
-            "برمجة": "أحدث تقنيات 2024: Python, AI, Web3, Cloud",
-            "شبكات": "الاتجاهات: 5G, IoT, الأمن السيبراني, SDN", 
-            "أنظمة": "التطورات: الحاويات, Kubernetes, DevOps, السحابة"
-        }
-        
-        for topic, info in topics.items():
-            if topic in query:
-                return f"🔍 معلومات عن {topic}:\n{info}"
-        
-        return "🔍 لم أجد نتائج دقيقة. جرب: برمجة، شبكات، أنظمة"
-    
+        topics={"برمجة":"Python, AI, Web3","شبكات":"5G, IoT, الأمن السيبراني","أنظمة":"Containers, Kubernetes, DevOps"}
+        for t,info in topics.items():
+            if t in query: return f"🔍 {t}: {info}"
+        return "🔍 جرّب كلمات: برمجة / شبكات / أنظمة"
+
     def get_welcome_message(self):
-        """رسالة ترحيب"""
-        return """🚀 **مرحباً بك في النواة الذكية!**
+        return "🚀 أهلاً بك في النواة الذكية! اكتب: «نموذج: اكتب رسالة ترحيب لمشروع بسام» لتجربة الموديل."
 
-أستطيع مساعدتك في:
-
-💻 **البرمجة:**
-   - إنشاء أكواد Python كاملة
-   - تطبيقات ويب، بوتات، أدوات
-   - مراجعة وتحليل الأكواد
-
-🎯 **التعلم:**
-   - مسارات تعلم مخصصة
-   - شروحات مفصلة
-   - نصائح تطوير
-
-💡 **المشاريع:**
-   - أفكار مشاريع إبداعية
-   - تخطيط وتنفيذ
-   - حل المشاكل
-
-📝 **جرب أن تطلب:**
-   - "أنشئ لي كود آلة حاسبة"
-   - "اصنع بوت دردشة"
-   - "مسار تعلم برمجة" 
-   - "راجع هذا الكود: ```print('hello')```"
-
-**ما الذي تريد أن تبدأ به؟**"""
-    
     def generate_smart_response(self, message):
-        """رد ذكي بديل"""
-        return f"""🤔 لقد طلبت: "{message}"
+        return f"🤔 طلبت: «{message}». يمكنك قول: «نموذج: …» أو «أنشئ كود …»."
 
-لكن لم أفهم بالضبط ما تريد. هل تقصد:
-
-💻 **برمجة؟** - "أنشئ لي كود [شيء محدد]"
-🎓 **تعلم؟** - "مسار تعلم [مجال]"  
-🔍 **مراجعة؟** - "راجع هذا الكود"
-💡 **مشروع؟** - "فكرة مشروع"
-
-أخبرني ما المجال الذي تريده وسأساعدك! 🚀"""
-    
     def extract_code(self, message):
-        """استخراج الكود من الرسالة"""
-        code_blocks = re.findall(r'```[\w]*\n(.*?)\n```', message, re.DOTALL)
-        return code_blocks[0] if code_blocks else None
+        blocks=re.findall(r'```[\\w]*\\n(.*?)\\n```', message, re.DOTALL)
+        return blocks[0] if blocks else None
 
-# تهيئة النواة
+# ====== تهيئة النواة ======
 ai_core = SmartAICore()
 
+# ====== المسارات ======
 @app.route('/')
 def home():
-    return render_template('index.html')
+    # صفحة بسيطة (لو لديك templates/index.html سيعمل render_template)
+    try:
+        return render_template('index.html')
+    except Exception:
+        return "<h2>Bassam AI Core</h2><p>أرسل POST إلى /api/chat أو /api/generate</p>"
 
 @app.route('/api/chat', methods=['POST'])
 def chat_api():
     try:
-        data = request.get_json()
-        user_message = data.get('message', '').strip()
-        
+        data = request.get_json(force=True)
+        user_message = (data.get('message') or "").strip()
         if not user_message:
             return jsonify({'error': 'لا يوجد رسالة'}), 400
-        
         result = ai_core.process_message(user_message)
-        
-        return jsonify({
-            'response': result,
-            'timestamp': datetime.now().isoformat()
-        })
-        
+        return jsonify({'response': result, 'timestamp': datetime.now().isoformat()})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# مسار مباشر لاستدعاء الموديل (للاختبارات/الفرونت)
+@app.route('/api/generate', methods=['POST'])
+def generate_api():
+    data = request.get_json(force=True)
+    prompt = (data.get("prompt") or "").strip()
+    model = (data.get("model") or DEFAULT_HF_MODEL).strip()
+    if not prompt:
+        return jsonify({"error": "الرجاء إرسال prompt"}), 400
+    text = hf_generate(prompt, model=model)
+    return jsonify({"model": model, "output": text, "ts": datetime.now().isoformat()})
+
 @app.route('/health')
 def health_check():
-    return jsonify({'status': 'running', 'version': 'smart_2.0'})
+    return jsonify({'status': 'running', 'version': 'smart_hf_2.1', 'model': DEFAULT_HF_MODEL})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
