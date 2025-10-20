@@ -90,4 +90,29 @@ class NetworkEngineer:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
-                status
+                status = "✅ الاتصال نشط"
+            else:
+                status = "❌ مشكلة في الاتصال"
+            
+            return {
+                'message': f"🌐 اختبار الاتصال:\nالهدف: {target}\nالحالة: {status}",
+                'type': 'connection_test',
+                'target': target,
+                'status': status,
+                'suggestions': ['اختبار مواقع أخرى', 'فحص DNS', 'تحليل الشبكة']
+            }
+            
+        except Exception as e:
+            return {
+                'message': f"❌ تعذر اختبار الاتصال: {e}",
+                'type': 'error',
+                'suggestions': ['محاولة أخرى', 'فحص الإعدادات']
+            }
+    
+    def general_network_help(self, message):
+        """مساعدة شبكية عامة"""
+        return {
+            'message': "🛜 مساعدة شبكية! أستطيع:\n• شرح مفاهيم الشبكات\n• فحص اتصال الشبكة\n• تحليل مشاكل الاتصال\n• تقديم نصائح أمنية\n\nما الذي تحتاجه؟",
+            'type': 'network_help',
+            'suggestions': ['شرح TCP/IP', 'فحص اتصال الإنترنت', 'تحليل مشكلة شبكية']
+        }
