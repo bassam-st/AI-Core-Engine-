@@ -1,280 +1,175 @@
 #!/usr/bin/env python3
-# النواة الذكية المتقدمة - إصدار مع دمج نموذج Hugging Face + حماية وأخطاء
-
-import os, json, re, time
+# Bassam Smart Core — Q&A + Code + Apps + Summarize + Analyze + Teach
+import os, json, time, re
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 import requests
 
-HF_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # تأكد أنه مضاف في Render
-# موديلات عامة تعمل عبر Inference API (اختر واحد)
-DEFAULT_HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
-# مهلة الشبكة حتى لا تتجمد النواة
-HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "35"))
-
 app = Flask(__name__)
 
-# ====== طبقة الاتصال بـ Hugging Face ======
+# ========= إعدادات النماذج =========
+HF_API_KEY = os.getenv("HUGGINGFACE_API_KEY")  # ضع هذا في Render
+DEFAULT_HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
+HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "35"))
+
+# ========= مساعد الاتصال بـ Hugging Face =========
 def hf_generate(prompt: str,
                 model: str = DEFAULT_HF_MODEL,
-                max_new_tokens: int = 256,
+                max_new_tokens: int = 512,
                 temperature: float = 0.4,
                 retries: int = 2) -> str:
-    """
-    تستدعي نموذج Hugging Face مع تخفيض المخاطر:
-    - قراءة المفتاح من البيئة فقط
-    - مهلات + محاولات إعادة
-    - رسائل خطأ واضحة بدون إسقاط الخدمة
-    """
     if not HF_API_KEY:
-        return "⚠️ مفتاح HUGGINGFACE_API_KEY غير موجود في البيئة."
-
+        return "⚠️ المتغيّر HUGGINGFACE_API_KEY غير موجود."
     url = f"https://api-inference.huggingface.co/models/{model}"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     payload = {
-        "inputs": f"### Instruction:\n{prompt}\n\n### Response:",
+        "inputs": f"{prompt}",
         "parameters": {
             "max_new_tokens": max_new_tokens,
             "temperature": temperature,
             "return_full_text": False
         }
     }
-
     last_err = None
     for _ in range(retries + 1):
         try:
             r = requests.post(url, headers=headers, json=payload, timeout=HTTP_TIMEOUT)
-            # 503 تعني أن الموديل يحمّل للمرة الأولى؛ ننتظر قليلاً ثم نكرر
-            if r.status_code in (503, 524):
-                last_err = f"Model warming up (status {r.status_code})"
-                time.sleep(3)
-                continue
+            if r.status_code in (503, 524):  # تسخين النموذج
+                last_err = "⏳ الموديل يسخّن، إعادة المحاولة…"
+                time.sleep(3); continue
             if r.status_code == 401:
-                return "⛔ مفتاح Hugging Face غير صالح أو الصلاحيات غير كافية."
+                return "⛔ مفتاح Hugging Face غير صالح."
             r.raise_for_status()
             data = r.json()
-            # صيغ الاستجابة تختلف باختلاف الموديل؛ نتعامل مع الأكثر شيوعًا
             if isinstance(data, list) and data and "generated_text" in data[0]:
                 return data[0]["generated_text"].strip()
             if isinstance(data, dict) and "generated_text" in data:
                 return data["generated_text"].strip()
-            # في بعض الأحيان تكون الاستجابة قائمة من dicts داخلها 'generated_token_count' فقط
             return json.dumps(data, ensure_ascii=False)[:2000]
         except requests.exceptions.Timeout:
-            last_err = "⏳ انتهت مهلة الاتصال بالموديل."
+            last_err = "⏳ انتهت المهلة."
         except Exception as e:
-            last_err = f"❗ خطأ أثناء الاتصال بالموديل: {e}"
+            last_err = f"❗ خطأ اتصال: {e}"
         time.sleep(1)
+    return last_err or "⚠️ تعذّر الحصول على استجابة من النموذج."
 
-    return last_err or "⚠️ تعذّر الحصول على استجابة من الموديل."
-
-# ====== النواة المنطقية المحلية ======
-class SmartAICore:
+# ========= لبّ “النواة الذكية” =========
+class SmartCore:
     def __init__(self):
-        self.setup_directories()
-        self.load_knowledge()
-        self.conversation_memory = []
+        os.makedirs("memory", exist_ok=True)
+        self.notes_file = "memory/notes.json"
+        if not os.path.exists(self.notes_file):
+            with open(self.notes_file, "w", encoding="utf-8") as f: json.dump([], f, ensure_ascii=False)
 
-    def setup_directories(self):
-        os.makedirs('knowledge', exist_ok=True)
-        os.makedirs('memory', exist_ok=True)
+    # 1) سؤال عام (Q&A)
+    def answer_any(self, question: str) -> str:
+        prompt = (
+            "أجب بإيجاز ووضوح باللغة العربية. إذا احتجت أمثلة أو خطوات برمجية فاذكرها.\n"
+            f"السؤال: {question}"
+        )
+        return hf_generate(prompt)
 
-    def load_knowledge(self):
+    # 2) توليد أكواد
+    def generate_code(self, request_text: str) -> str:
+        prompt = (
+            "أنت مولد أكواد محترف. أعد كودًا كاملاً وجاهزًا للتشغيل مع شرح قصير بالعربية.\n"
+            "التزم بوضع الكود داخل كتلة ```اللغة ...```. إن كان إطار عمل محدد فاتبعه.\n"
+            f"المطلوب: {request_text}"
+        )
+        return hf_generate(prompt, max_new_tokens=700, temperature=0.3)
+
+    # 3) صنع تطبيقات ذكاء اصطناعي (هيكل جاهز)
+    def make_ai_app(self, idea: str) -> str:
+        prompt = (
+            "ولّد مشروعًا أوليًا (MVP) لتطبيق ذكاء اصطناعي مع الملفات الأساسية.\n"
+            "اشرح الهيكل، ثم أعطِ ملفات رئيسية مختصرة (app.py أو main.py، requirements، README).\n"
+            f"فكرة التطبيق: {idea}"
+        )
+        return hf_generate(prompt, max_new_tokens=900, temperature=0.35)
+
+    # 4) تلخيص
+    def summarize(self, text: str) -> str:
+        prompt = (
+            "لخّص النص التالي بالعربية في نقاط قصيرة وواضحة، ثم أعطِ خلاصة نهائية.\n"
+            f"النص:\n{text}"
+        )
+        return hf_generate(prompt, max_new_tokens=400, temperature=0.2)
+
+    # 5) تحليل/استخلاص (أفكار، كيانات، خطوات)
+    def analyze(self, text: str) -> str:
+        prompt = (
+            "حلّل النص بالعربية: أهم الأفكار، الكيانات، الأسباب والنتائج، وخطوات عملية مقترحة."
+            f"\nالنص:\n{text}"
+        )
+        return hf_generate(prompt, max_new_tokens=500, temperature=0.3)
+
+    # 6) تعليم ذاتي بسيط (تخزين ملاحظات/معارف يدوية)
+    def teach(self, note: str) -> str:
         try:
-            with open('knowledge/elite_knowledge.json', 'r', encoding='utf-8') as f:
-                self.knowledge = json.load(f)
-        except Exception:
-            self.knowledge = self.create_basic_knowledge()
+            with open(self.notes_file, "r", encoding="utf-8") as f: notes = json.load(f)
+            notes.append({"ts": datetime.now().isoformat(), "note": note})
+            with open(self.notes_file, "w", encoding="utf-8") as f: json.dump(notes, f, ensure_ascii=False, indent=2)
+            return "✅ تم حفظ المعلومة للتعلّم لاحقًا."
+        except Exception as e:
+            return f"❗ تعذّر الحفظ: {e}"
 
-    def create_basic_knowledge(self):
-        return {
-            "expert_qa": {
-                "برمجة": {
-                    "كيف أنشئ API؟": "Flask → routes → JSON → test",
-                    "ما هي Python؟": "لغة برمجة قوية وبسيطة للويب والبيانات وAI",
-                    "كيف أبدأ البرمجة؟": "ابدأ بـ Python ثم هياكل البيانات ثم تخصّص"
-                }
-            },
-            "code_templates": {
-                "python_basic": "print('مرحباً بالعالم!')",
-                "python_web": "from flask import Flask\napp = Flask(__name__)\n@app.route('/')\ndef home():\n    return 'مرحباً!'\n\nif __name__=='__main__':\n    app.run()",
-                "python_calculator": "def add(a,b): return a+b\nprint(add(5,3))"
-            }
-        }
+core = SmartCore()
 
-    def process_message(self, message, user_id="default"):
-        msg = message.lower().strip()
-        # مشغل صريح للنموذج السحابي
-        # أمثلة: "نموذج: اكتب رسالة ترحيب" أو "model: summarize ..."
-        if msg.startswith("نموذج:") or msg.startswith("model:") or "جرّب الموديل" in msg or "شغّل النموذج" in msg:
-            pure = message.split(":", 1)[1].strip() if ":" in message else message
-            return hf_generate(pure)
-
-        # كلمات مفتاحية → كود جاهز
-        if any(w in msg for w in ["انشئ", "اصنع", "اكتب", "كود", "python", "بايثون"]):
-            if any(w in msg for w in ["حساب", "جمع", "طرح", "آلة حاسبة", "calculator"]):
-                return self.generate_calculator()
-            elif any(w in msg for w in ["موقع", "ويب", "web", "فلاسك", "flask"]):
-                return self.generate_web_app()
-            elif any(w in msg for w in ["بوت", "دردشة", "chatbot"]):
-                return self.generate_chatbot()
-            elif any(w in msg for w in ["بيانات", "data", "تحليل"]):
-                return self.generate_data_analysis()
-            else:
-                return self.generate_basic_code()
-
-        if any(w in msg for w in ["مسار", "تعلم", "تعليم"]):
-            return self.generate_learning_path()
-
-        if any(w in msg for w in ["راجع", "حلل", "افحص الكود"]):
-            code = self.extract_code(message)
-            return self.code_review(code) if code else "📝 أرسل الكود الذي تريد مراجعته بين ```"
-
-        if any(w in msg for w in ["فكرة", "مشروع", "مقترح"]):
-            return self.generate_project_idea()
-
-        if any(w in msg for w in ["شعور", "مشاعر", "رأيك"]):
-            return f"🎭 تحليل المشاعر: {self.analyze_sentiment(message)}"
-
-        if any(w in msg for w in ["ابحث", "بحث", "معلومات عن"]):
-            return self.web_search(message)
-
-        if any(w in msg for w in ["مرحب", "اهلا", "سلام", "hello", "hi"]):
-            return self.get_welcome_message()
-
-        # الافتراضي: جرّب الموديل السحابي أولًا، ثم سقط على رد محلي
-        cloud = hf_generate(message)
-        if cloud and not cloud.startswith(("⚠️", "⛔", "❗", "⏳")):
-            return cloud
-        return self.generate_smart_response(message)
-
-    # ======= باقي مولدات الكود/المحتوى (بدون تغيير جوهري) =======
-    def generate_calculator(self):
-        code = """class Calculator:
-    def __init__(self): self.history=[]
-    def add(self,a,b): r=a+b; self.history.append(f"{a}+{b}={r}"); return r
-    def subtract(self,a,b): r=a-b; self.history.append(f"{a}-{b}={r}"); return r
-    def multiply(self,a,b): r=a*b; self.history.append(f"{a}×{b}={r}"); return r
-    def divide(self,a,b):
-        if b==0: return "خطأ: قسمة على صفر"
-        r=a/b; self.history.append(f"{a}÷{b}={r}"); return r
-    def show_history(self): print("\\n".join(self.history))
-
-calc=Calculator(); print("10+5=",calc.add(10,5)); calc.show_history()"""
-        return f"🧮 كود آلة حاسبة:\n\n```python\n{code}\n```"
-
-    def generate_web_app(self):
-        code = """from flask import Flask
-app=Flask(__name__)
-@app.route('/')
+# ========= الويب =========
+@app.route("/")
 def home():
-    return '<h1>مرحباً بك! 🌟</h1><p>هذا تطبيق Flask بسيط.</p>'
-if __name__=='__main__': app.run()"""
-        return f"🌐 كود تطبيق ويب:\n\n```python\n{code}\n```"
+    return render_template("index.html")
 
-    def generate_chatbot(self):
-        code = """class ChatBot:
-    def __init__(self):
-        self.responses={'مرحباً':'أهلاً وسهلاً!','كيف الحال':'أنا بخير 😊','ما اسمك':'أنا بوت الدردشة!','وداعاً':'مع السلامة!'}
-    def respond(self,msg):
-        m=msg.lower()
-        for k,v in self.responses.items():
-            if k in m: return v
-        return 'هل توضح سؤالك أكثر؟'
-bot=ChatBot(); print(bot.respond('مرحباً'))"""
-        return f"🤖 كود بوت دردشة:\n\n```python\n{code}\n```"
+@app.route("/health")
+def health():
+    return jsonify({"status": "running", "model": DEFAULT_HF_MODEL, "ts": datetime.now().isoformat()})
 
-    def generate_data_analysis(self):
-        code = """import pandas as pd, matplotlib.pyplot as plt
-df=pd.DataFrame({'الشهر':['يناير','فبراير','مارس','أبريل'],'المبيعات':[120,150,180,200]})
-print(df); print(df.describe()); df.plot(x='الشهر',y='المبيعات',marker='o'); plt.show()"""
-        return f"📊 كود تحليل بيانات:\n\n```python\n{code}\n```"
-
-    def generate_basic_code(self):
-        code = """def calculate(a,b):
-    print(f"{a}+{b}={a+b}"); print(f"{a}-{b}={a-b}"); print(f"{a}×{b}={a*b}")
-    if b!=0: print(f"{a}÷{b}={a/b}")
-with open('example.txt','w',encoding='utf-8') as f: f.write('مرحباً!\\n')
-calculate(10,5)"""
-        return f"💻 كود Python أساسي:\n\n```python\n{code}\n```"
-
-    def generate_learning_path(self):
-        return "🎯 مسار تعلم: أساسيات Python → هياكل البيانات → OOP → Flask/APIs → قواعد بيانات → مشاريع عملية"
-
-    def code_review(self, code):
-        issues=[]
-        if not code: return "أرسل الكود بين ```"
-        low=code.lower()
-        if "password" in low and "encrypt" not in low: issues.append("🔒 شفّر كلمات المرور.")
-        if "select *" in low: issues.append("🗃️ تجنّب SELECT *.")
-        if "eval(" in low: issues.append("⚠️ تجنّب eval().")
-        return "🔍 مراجعة الكود:\n" + ("\n".join(issues) if issues else "✅ لا مشاكل واضحة.")
-
-    def generate_project_idea(self):
-        return "💡 فكرة: نظام مهام مع إشعارات وتقرير أسبوعي."
-
-    def analyze_sentiment(self, text):
-        pos = any(w in text for w in ['جيد','ممتاز','رائع','جميل'])
-        neg = any(w in text for w in ['سيء','مشكلة','خطأ','لا يعمل'])
-        if pos and not neg: return "إيجابي 😊"
-        if neg and not pos: return "سلبي 😔"
-        return "محايد 😐"
-
-    def web_search(self, query):
-        topics={"برمجة":"Python, AI, Web3","شبكات":"5G, IoT, الأمن السيبراني","أنظمة":"Containers, Kubernetes, DevOps"}
-        for t,info in topics.items():
-            if t in query: return f"🔍 {t}: {info}"
-        return "🔍 جرّب كلمات: برمجة / شبكات / أنظمة"
-
-    def get_welcome_message(self):
-        return "🚀 أهلاً بك في النواة الذكية! اكتب: «نموذج: اكتب رسالة ترحيب لمشروع بسام» لتجربة الموديل."
-
-    def generate_smart_response(self, message):
-        return f"🤔 طلبت: «{message}». يمكنك قول: «نموذج: …» أو «أنشئ كود …»."
-
-    def extract_code(self, message):
-        blocks=re.findall(r'```[\\w]*\\n(.*?)\\n```', message, re.DOTALL)
-        return blocks[0] if blocks else None
-
-# ====== تهيئة النواة ======
-ai_core = SmartAICore()
-
-# ====== المسارات ======
-@app.route('/')
-def home():
-    # صفحة بسيطة (لو لديك templates/index.html سيعمل render_template)
-    try:
-        return render_template('index.html')
-    except Exception:
-        return "<h2>Bassam AI Core</h2><p>أرسل POST إلى /api/chat أو /api/generate</p>"
-
-@app.route('/api/chat', methods=['POST'])
-def chat_api():
+# واجهة موحّدة: نوع المهمة عبر action
+@app.route("/api/agent", methods=["POST"])
+def api_agent():
+    """
+    body JSON:
+    {
+      "action": "ask|code|makeapp|summarize|analyze|teach",
+      "input": "النص/السؤال/الفكرة"
+    }
+    """
     try:
         data = request.get_json(force=True)
-        user_message = (data.get('message') or "").strip()
-        if not user_message:
-            return jsonify({'error': 'لا يوجد رسالة'}), 400
-        result = ai_core.process_message(user_message)
-        return jsonify({'response': result, 'timestamp': datetime.now().isoformat()})
+        action = (data.get("action") or "").lower()
+        text = (data.get("input") or "").strip()
+        if not action or not text:
+            return jsonify({"error": "أرسل action و input"}), 400
+
+        if action == "ask":
+            out = core.answer_any(text)
+        elif action == "code":
+            out = core.generate_code(text)
+        elif action == "makeapp":
+            out = core.make_ai_app(text)
+        elif action == "summarize":
+            out = core.summarize(text)
+        elif action == "analyze":
+            out = core.analyze(text)
+        elif action == "teach":
+            out = core.teach(text)
+        else:
+            return jsonify({"error": "action غير معروف"}), 400
+
+        return jsonify({"ok": True, "action": action, "output": out, "ts": datetime.now().isoformat()})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
 
-# مسار مباشر لاستدعاء الموديل (للاختبارات/الفرونت)
-@app.route('/api/generate', methods=['POST'])
-def generate_api():
+# توافق مع /api/chat (سؤال عام)
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
     data = request.get_json(force=True)
-    prompt = (data.get("prompt") or "").strip()
-    model = (data.get("model") or DEFAULT_HF_MODEL).strip()
-    if not prompt:
-        return jsonify({"error": "الرجاء إرسال prompt"}), 400
-    text = hf_generate(prompt, model=model)
-    return jsonify({"model": model, "output": text, "ts": datetime.now().isoformat()})
+    msg = (data.get("message") or "").strip()
+    if not msg:
+        return jsonify({"error": "لا يوجد رسالة"}), 400
+    out = core.answer_any(msg)
+    return jsonify({"response": out, "timestamp": datetime.now().isoformat()})
 
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'running', 'version': 'smart_hf_2.1', 'model': DEFAULT_HF_MODEL})
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
