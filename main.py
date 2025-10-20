@@ -22,7 +22,9 @@ import sqlite3
 try:
     semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
     MODEL_LOADED = True
-except:
+    print("✅ تم تحميل النماذج المتقدمة بنجاح!")
+except Exception as e:
+    print(f"⚠️  تعذر تحميل النماذج المتقدمة: {e}")
     MODEL_LOADED = False
 
 app = Flask(__name__)
@@ -55,7 +57,9 @@ class EliteAICore:
         try:
             with open('knowledge/elite_knowledge.json', 'r', encoding='utf-8') as f:
                 self.knowledge = json.load(f)
-        except:
+            print("✅ تم تحميل المعرفة المتقدمة بنجاح!")
+        except Exception as e:
+            print(f"⚠️  تعذر تحميل المعرفة: {e}")
             self.knowledge = self.create_elite_knowledge()
     
     def create_elite_knowledge(self):
@@ -584,6 +588,16 @@ def get_project_idea():
     
     idea = ai_core.generate_project_idea(field, complexity)
     return jsonify({'project_idea': idea})
+
+@app.route('/health')
+def health_check():
+    """فحص صحة النظام"""
+    return jsonify({
+        'status': 'running',
+        'model_loaded': MODEL_LOADED,
+        'version': 'elite_2.0.0',
+        'timestamp': datetime.now().isoformat()
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
