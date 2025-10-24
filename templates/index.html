@@ -1,143 +1,70 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>النواة الذكية المتقدمة</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            margin: 0; padding: 20px; color: #333; min-height: 100vh;
-        }
-        .container {
-            max-width: 1000px; margin: 0 auto; background: white;
-            padding: 30px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #2c3e50; font-size: 2.5em; margin-bottom: 10px; }
-        .header p { color: #7f8c8d; font-size: 1.2em; }
-        
-        .chat-container {
-            border: 2px solid #e0e0e0; border-radius: 15px; padding: 20px;
-            margin-bottom: 20px; background: #f8f9fa; height: 500px; overflow-y: auto;
-        }
-        .message { margin: 15px 0; padding: 15px; border-radius: 15px; max-width: 85%; }
-        .user-message { background: #007bff; color: white; margin-left: auto; text-align: left; }
-        .bot-message { background: #e9ecef; color: #333; margin-right: auto; white-space: pre-line; }
-        
-        .input-container { display: flex; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { 
-            flex: 1; padding: 15px; border: 2px solid #ddd; border-radius: 10px;
-            font-size: 16px; outline: none; transition: border-color 0.3s;
-        }
-        input[type="text"]:focus { border-color: #007bff; }
-        button { 
-            padding: 15px 25px; background: #007bff; color: white; border: none;
-            border-radius: 10px; font-size: 16px; cursor: pointer; transition: background 0.3s;
-        }
-        button:hover { background: #0056b3; }
-        
-        .features {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px; margin-top: 30px;
-        }
-        .feature {
-            background: white; padding: 20px; border-radius: 10px; text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1); border: 1px solid #e0e0e0;
-            transition: transform 0.3s;
-        }
-        .feature:hover { transform: translateY(-5px); }
-        .feature-icon { font-size: 2em; margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🤖 النواة الذكية المتقدمة</h1>
-            <p>Elite AI Core - التعلم العميق + الذكاء الاصطناعي + التطوير المتقدم</p>
-        </div>
-        
-        <div class="chat-container" id="chatContainer">
-            <div class="message bot-message">
-                🧠 مرحباً! أنا النواة الذكية المتطورة مع:
-                • نماذج الذكاء الاصطناعي المحلية
-                • تحليل المشاعر والنوايا
-                • توليد أكواد متقدمة
-                • مسارات تعلم مخصصة
-                • مراجعة الأكواد الذكية
-                • أفكار مشاريع إبداعية
-                
-                جرب: "ابحث عن أحدث تقنيات البرمجة" أو "أنشئ لي كود بوت ذكي"
-            </div>
-        </div>
-        
-        <div class="input-container">
-            <input type="text" id="userInput" placeholder="اكتب رسالتك هنا... (جرب: مسار تعلم برمجة، راجع كود، فكرة مشروع)" 
-                   onkeypress="if(event.key=='Enter') sendMessage()">
-            <button onclick="sendMessage()">إرسال 🚀</button>
-        </div>
-        
-        <div class="features">
-            <div class="feature">
-                <div class="feature-icon">🎓</div>
-                <h3>تعلم متقدم</h3>
-                <p>مسارات تعلم مخصصة لكل مستوى</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">💻</div>
-                <h3>توليد أكواد</h3>
-                <p>Python, React, Node.js, APIs</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">🔍</div>
-                <h3>مراجعة كود</h3>
-                <p>تحليل أمني وأدائي</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">💡</div>
-                <h3>إبداع مشاريع</h3>
-                <p>أفكار مبتكرة حسب التخصص</p>
-            </div>
-        </div>
-    </div>
+<!doctype html>
+<meta charset="utf-8" />
+<title>Al Core Engine — Free Brain</title>
+<link rel="stylesheet" href="/static/style.css" />
+<div class="wrap">
+  <h1>النواة الذكية — مجانية وبدون مفاتيح</h1>
+  <div id="chat"></div>
+  <form id="f">
+    <input id="msg" placeholder="اكتب سؤالك هنا..." />
+    <button>إرسال</button>
+  </form>
 
-    <script>
-        function sendMessage() {
-            const input = document.getElementById('userInput');
-            const message = input.value.trim();
-            if (!message) return;
-            
-            addMessage(message, 'user');
-            
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({message: message, user_id: 'web_user'})
-            })
-            .then(response => response.json())
-            .then(data => {
-                addMessage(data.response, 'bot');
-                if (data.analysis) {
-                    console.log('التحليل:', data.analysis);
-                }
-            })
-            .catch(error => {
-                addMessage('❌ حدث خطأ في الاتصال: ' + error, 'bot');
-            });
-            
-            input.value = '';
-        }
+  <div class="row">
+    <button id="learnBtn">تعلّمي الآن (Autolearn)</button>
+    <input id="fact" placeholder="أضف معلومة يدوية..." />
+    <button id="saveFact">حفظ المعلومة</button>
+  </div>
 
-        function addMessage(text, sender) {
-            const chatContainer = document.getElementById('chatContainer');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-            messageDiv.innerHTML = text.replace(/\n/g, '<br>');
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-    </script>
-</body>
-</html>
+  <div class="sources" id="sources"></div>
+</div>
+<script>
+const chat = document.getElementById('chat');
+const f = document.getElementById('f');
+const msg = document.getElementById('msg');
+const sources = document.getElementById('sources');
+const learnBtn = document.getElementById('learnBtn');
+const fact = document.getElementById('fact');
+const saveFact = document.getElementById('saveFact');
+
+f.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = msg.value.trim();
+  if(!q) return;
+  chat.innerHTML += `<div class="you">${q}</div>`;
+  msg.value = "";
+  const r = await fetch('/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({message: q})
+  });
+  const j = await r.json();
+  chat.innerHTML += `<div class="bot">${(j.reply||'').replace(/\n/g,'<br>')}</div>`;
+  sources.innerHTML = (j.sources||[]).map(s=>`<a target="_blank" href="${s.url}">🔗 ${s.title}</a>`).join(' ');
+});
+
+learnBtn.addEventListener('click', async () => {
+  learnBtn.disabled = true;
+  learnBtn.textContent = "تعمل...";
+  try{
+    const r = await fetch('/api/autolearn/run', {method:'POST'});
+    const j = await r.json();
+    chat.innerHTML += `<div class="bot">تم التعلّم الذاتي: أضفت ${j.added||0} جملة معرفة.</div>`;
+  } finally {
+    learnBtn.disabled = false;
+    learnBtn.textContent = "تعلّمي الآن (Autolearn)";
+  }
+});
+
+saveFact.addEventListener('click', async () => {
+  const t = fact.value.trim();
+  if(!t) return;
+  const r = await fetch('/api/learn', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({text: t, source: "manual"})
+  });
+  fact.value = "";
+  chat.innerHTML += `<div class="bot">تم حفظ المعلومة في الذاكرة ✅</div>`;
+});
+</script>
