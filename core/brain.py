@@ -1,4 +1,4 @@
-# core/brain.py — دماغ مبسط: ذاكرة + بحث ويب + تلخيص جُمَل
+# core/brain.py — دماغ ذكي: ذاكرة + بحث ويب + تلخيص
 from __future__ import annotations
 from typing import List, Tuple
 from core.memory import search_memory, add_fact, save_conv
@@ -37,13 +37,17 @@ def _format_sources(sources: List[dict]) -> List[dict]:
 
 def chat_answer(q: str) -> Tuple[str, List[dict]]:
     q = (q or "").strip()
-    # 1) ذاكرة
     mem_hits = search_memory(q, limit=5)
     mem_texts = [h["text"] for h in mem_hits]
-    # 2) قرار استخدام الويب
+
     need_web = len(mem_hits) == 0 or (mem_hits and mem_hits[0]["score"] < 1.5)
-    web_results = web_search(q, max_results=6) if need_web else []
-    # 3) جلب نصوص من أفضل الروابط
+
+    # ✅ تعديل هنا ليمنع انهيار النظام في حال فشل البحث
+    try:
+        web_results = web_search(q, max_results=6) if need_web else []
+    except Exception:
+        web_results = []
+
     page_texts: List[str] = []
     for r in web_results[:3]:
         u = r.get("url")
@@ -52,17 +56,20 @@ def chat_answer(q: str) -> Tuple[str, List[dict]]:
         txt = fetch_text(u)
         if txt:
             page_texts.append(txt)
-    # 4) تلخيص وتركيب جواب
+
     summary_lines = _summarize_snippets(mem_texts + page_texts, max_lines=6)
     if not summary_lines and not mem_texts and not page_texts:
         reply = "لم أجد معلومات كافية الآن. جرّب إعادة الصياغة أو أضف معلومة يدويًا عبر /api/learn."
-        save_conv(q, reply);  return reply, []
+        save_conv(q, reply)
+        return reply, []
+
     opener = _pick_opener(len(mem_texts) + len(page_texts))
     body = ("\n- " + "\n- ".join(summary_lines)) if summary_lines else ""
     reply = f"{opener} {body.strip()}".strip()
-    # 5) تخزين بعض الجُمل كحقائق
+
     for line in summary_lines[:3]:
         if len(line) > 40:
             add_fact(line, source="autolearn")
+
     save_conv(q, reply)
     return reply, _format_sources(web_results[:5])
