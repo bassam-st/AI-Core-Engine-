@@ -1,4 +1,4 @@
-# main.py — النواة الذكية (FastAPI) مع تعلّم من الرسالة مباشرة
+# main.py — نواة بسّام الذكية: واجهة + دردشة + فريق إنشاء المشاريع
 from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -7,17 +7,23 @@ from fastapi.templating import Jinja2Templates
 
 from core.brain import chat_answer
 from core.memory import init_db, add_fact
-from core.learn_loop import run_once as autolearn_run_once
+from core.team import build_project  # <= منسّق الفريق (Planner/Researcher/Developer/Reviewer)
 
-app = FastAPI(title="AI Core Engine", version="1.0.0")
+app = FastAPI(title="AI Core Engine — Bassam", version="1.2.0")
+
+# مجلد static (اختياري) + قوالب HTML
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+# تهيئة قاعدة البيانات
 init_db()
 
+# الصفحة الرئيسية
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# دردشة الذكاء
 @app.post("/api/chat")
 async def api_chat(request: Request):
     try:
@@ -25,26 +31,50 @@ async def api_chat(request: Request):
         msg = (data.get("message") or "").strip()
         if not msg:
             return {"ok": False, "error": "empty_message"}
-
-        # أوامر سريعة داخل الرسالة (تعلم يدوي/ذاتي)
-        norm = msg.replace("أ","ا").replace("إ","ا").replace("آ","ا")
-        if norm.startswith("اضف") or norm.startswith("اضيف") or "اضف هذه المعلومه" in norm:
-            # مثال: "أضف هذه المعلومة: بسام الشيمي هو صاحب التطبيق"
-            text = msg.split(":", 1)[1].strip() if ":" in msg else msg[3:].strip()
-            if text:
-                add_fact(text, source="manual")
-                return {"ok": True, "reply": "تم حفظ المعلومة في الذاكرة ✅", "sources": []}
-
-        if "تعلمي" in norm or "تعلمي" in norm or "تعلمى" in norm or "تشغيل التعل" in norm:
-            added = autolearn_run_once()
-            return {"ok": True, "reply": f"تم التعلّم الذاتي. أُضيفت {added} جملة معرفة.", "sources": []}
-
         reply, sources = chat_answer(msg)
         return {"ok": True, "reply": reply, "sources": sources}
+    except Exception as e:
+        return JSONResponse(
+            status_code=200,
+            content={"ok": False, "error": "internal_error", "detail": str(e)[:300]},
+        )
 
+# حفظ معلومة يدويًا (اختياري)
+@app.post("/api/learn")
+async def api_learn(request: Request):
+    try:
+        data = await request.json()
+        txt = (data.get("text") or "").strip()
+        src = (data.get("source") or "manual").strip()
+        if not txt:
+            return {"ok": False, "error": "empty_text"}
+        add_fact(txt, source=src)
+        return {"ok": True, "added": 1}
     except Exception as e:
         return JSONResponse(status_code=200, content={"ok": False, "error": "internal_error", "detail": str(e)[:300]})
 
+# فريق الإنشاء: يخطّط/يبحث/ينتج ملفات
+@app.post("/api/team/build")
+async def api_team_build(request: Request):
+    try:
+        data = await request.json()
+        goal = (data.get("goal") or "").strip()
+        urls = data.get("urls") or []
+        if not goal:
+            return {"ok": False, "error": "empty_goal"}
+        result = build_project(goal, urls)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=200, content={
+            "ok": False, "error": "internal_error", "detail": str(e)[:300]
+        })
+
+# اختبار
 @app.get("/ping")
 def ping():
     return {"status": "alive", "message": "نظام النواة يعمل ✅"}
+
+# تشغيل محلي
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
