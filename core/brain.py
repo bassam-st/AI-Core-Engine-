@@ -1,4 +1,4 @@
-# core/brain.py — دماغ: ذاكرة + بحث + ويكي + ردود ودّية
+# core/brain.py — دماغ نواة بسّام الذكية (بحث + ويكي + كود + تعلم من الكود)
 from __future__ import annotations
 from typing import List, Tuple
 from core.memory import search_memory, add_fact, save_conv
@@ -39,24 +39,49 @@ def _format_sources(sources: List[dict] | None) -> List[dict]:
     safe = sources or []
     return [{"title": s.get("title",""), "url": s.get("url","")} for s in safe]
 
+def _normalize_ar(s: str) -> str:
+    return (s or "").replace("أ","ا").replace("إ","ا").replace("آ","ا").replace("ة","ه").lower()
+
 def _small_talk_reply(q: str) -> str | None:
-    nq = q.replace("أ","ا").replace("إ","ا").replace("آ","ا").replace("ة","ه").lower()
+    nq = _normalize_ar(q)
     for k, v in SMALL_TALK.items():
-        nk = k.replace("أ","ا").replace("إ","ا").replace("آ","ا").replace("ة","ه").lower()
-        if nk in nq:
+        if _normalize_ar(k) in nq:
             return v
     return None
+
+def _escape_html(s: str) -> str:
+    return s.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+def _is_code_intent(q: str) -> bool:
+    nq = _normalize_ar(q)
+    # كلمات متنوّعة للطلب: انشئ/انشا/سوي/اكتب/اعطني/ولد ... + كود/اكواد/برمجه/شفره
+    triggers_any = any(w in nq for w in ["انشئ","انشا","سوي","اكتب","اعطني","ولد","انشاء"])
+    code_words   = any(w in nq for w in ["كود","اكواد","برمجه","برمج","شفره","javascript","python","html","css","sql","جافا"])
+    return ("كود" in nq) or (triggers_any and code_words)
 
 def chat_answer(q: str) -> Tuple[str, List[dict]]:
     q = (q or "").strip()
     if not q:
         return "اذكر سؤالك من فضلك.", []
 
-    # 0) ردود ودّية سريعة
+    # 0) ردود ودّية
     st = _small_talk_reply(q)
     if st:
         save_conv(q, st)
         return st, []
+
+    # 0.5) ⚡ توليد الكود مباشرةً إن كانت النية برمجية (قبل أي بحث/تلخيص)
+    if _is_code_intent(q):
+        from core.coder import generate_code
+        result = generate_code(q)            # {title, lang, code}
+        code = result["code"]; lang = result["lang"]; title = result["title"]
+        code_html = _escape_html(code)
+        reply = f"🔧 {title}\n\n<pre><code>{code_html}</code></pre>"
+        # نتعلّم من الكود
+        add_fact(f"مثال كود ({lang}) بعنوان: {title}.", source="codegen")
+        add_fact(f"مقتطف {lang}: {code.strip()[:1200]}", source="codegen")
+        save_conv(q, reply)
+        return reply, []
 
     # 1) ذاكرة
     mem_hits = search_memory(q, limit=5)
@@ -69,15 +94,16 @@ def chat_answer(q: str) -> Tuple[str, List[dict]]:
     except Exception:
         web_results = []
 
-    # 3) جلب نصوص من الروابط + ملخص ويكي (fallback)
+    # 3) جلب نصوص من الروابط + ملخص ويكي
     page_texts: List[str] = []
     for r in web_results[:3]:
         u = r.get("url")
-        if not u: continue
+        if not u: 
+            continue
         txt = fetch_text(u)
-        if txt: page_texts.append(txt)
+        if txt:
+            page_texts.append(txt)
 
-    # ويكيپيديا كملاذ أخير
     if need_web and not page_texts:
         wk = wiki_summary_ar(q)
         if wk:
@@ -94,7 +120,7 @@ def chat_answer(q: str) -> Tuple[str, List[dict]]:
     body = ("\n- " + "\n- ".join(summary_lines)) if summary_lines else ""
     reply = f"{opener} {body.strip()}".strip()
 
-    # 5) تعلّم تلقائي بسيط
+    # 5) تعلّم تلقائي من الملخص
     for line in summary_lines[:3]:
         if len(line) > 40:
             add_fact(line, source="autolearn")
