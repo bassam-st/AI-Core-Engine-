@@ -1,55 +1,50 @@
-# main.py — نواة بحث/تلخيص/ذاكرة + تعلّم ذاتي ويدوي (بدون مفاتيح)
+# main.py — النواة الذكية المتكاملة (واجهة + API + ذاكرة + بحث)
+from __future__ import annotations
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
 
 from core.brain import chat_answer
-from core.memory import init_db, add_fact, search_memory
-from core.learn_loop import run_once as autolearn_run_once
+from core.memory import init_db
 
-app = FastAPI(title="Al Core Engine — Free Brain")
-
-# Static & Templates
+# ========= التهيئة =========
+app = FastAPI(title="AI Core Engine", version="1.0.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-class ChatIn(BaseModel):
-    message: str
+# ========= قاعدة البيانات =========
+init_db()
 
-class LearnIn(BaseModel):
-    text: str
-    source: str | None = None
-
-@app.on_event("startup")
-def _startup():
-    init_db()
-
+# ========= الصفحة الرئيسية =========
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# ========= API: محادثة =========
 @app.post("/api/chat")
-def api_chat(inp: ChatIn):
-    reply, sources = chat_answer(inp.message)
-    return {"ok": True, "reply": reply, "sources": sources}
+async def api_chat(request: Request):
+    try:
+        data = await request.json()
+        q = data.get("message", "").strip()
+        if not q:
+            return {"ok": False, "error": "empty_message"}
 
-@app.post("/api/learn")
-def api_learn(body: LearnIn):
-    add_fact(body.text.strip(), body.source or "manual")
-    return {"ok": True}
+        reply, sources = chat_answer(q)
+        return {"ok": True, "reply": reply, "sources": sources}
 
-@app.get("/api/memory/search")
-def api_memory(q: str):
-    hits = search_memory(q, limit=5)
-    return {"ok": True, "hits": hits}
+    except Exception as e:
+        return JSONResponse(
+            status_code=200,
+            content={"ok": False, "error": "internal_error", "detail": str(e)[:300]},
+        )
 
-@app.post("/api/autolearn/run")
-def api_autolearn():
-    added = autolearn_run_once()
-    return {"ok": True, "added": added}
+# ========= API: اختبار سريع =========
+@app.get("/ping")
+def ping():
+    return {"status": "alive", "message": "نظام النواة يعمل ✅"}
 
-@app.get("/health")
-def health():
-    return {"ok": True}
+# ========= تشغيل محلي =========
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
