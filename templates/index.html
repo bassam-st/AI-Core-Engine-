@@ -1,111 +1,347 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html dir="rtl" lang="ar">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Core Engine — نواة بسام الذكية 🚀</title>
-  <style>
-    :root{--bg:#0b1220;--panel:#121b2d;--ink:#e7ecff;--muted:#9db2d7;--you:#243a73;--bot:#18263f;--pri:#0078ff}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:Tajawal,system-ui,Segoe UI,Arial}
-    header{padding:14px;text-align:center;background:var(--panel);font-weight:700}
-    main{max-width:780px;margin:24px auto;padding:0 14px}
-    .card{background:var(--panel);border:1px solid #1e2b44;border-radius:16px;padding:16px}
-    #chat{min-height:420px;max-height:70vh;overflow:auto;background:#0e1728;border-radius:12px;padding:14px}
-    .you,.bot{margin:8px 0;padding:10px;border-radius:12px;line-height:1.6}
-    .you{background:var(--you);text-align:right}
-    .bot{background:var(--bot);text-align:left}
-    form{display:flex;gap:10px;margin-top:12px}
-    input[type=text]{flex:1;padding:12px;border-radius:12px;border:1px solid #1e2b44;background:#0e1728;color:var(--ink)}
-    button{padding:12px 16px;border:0;border-radius:12px;background:var(--pri);color:#fff;font-weight:700;cursor:pointer}
-    button:hover{filter:brightness(1.1)}
-    #sources{margin-top:10px}
-    #sources a{color:#9bd1ff;text-decoration:none;display:block;margin:3px 0}
-    footer{margin:20px 0;color:var(--muted);text-align:center;font-size:.9rem}
-    .toolbar{display:flex;gap:10px;margin:8px 0}
-    .ghost{background:#0f1b31;border:1px solid #1e2b44}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نواة بسّام الذكية</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 400px;
+            height: 80vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .chat-header h1 {
+            font-size: 1.4em;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .message {
+            max-width: 80%;
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            position: relative;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background: #4CAF50;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+            text-align: left;
+        }
+
+        .bot-message {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+            text-align: right;
+        }
+
+        .message-time {
+            font-size: 0.7em;
+            opacity: 0.7;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .user-message .message-time {
+            text-align: left;
+        }
+
+        .chat-input-container {
+            padding: 15px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            outline: none;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #4CAF50;
+        }
+
+        .send-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s;
+        }
+
+        .send-button:hover {
+            background: #45a049;
+        }
+
+        .send-button:active {
+            transform: scale(0.95);
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px 15px;
+            background: white;
+            border-radius: 18px;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+            max-width: 80px;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* تخصيص شريط التمرير */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* تصميم متجاوب */
+        @media (max-width: 480px) {
+            .chat-container {
+                width: 95%;
+                height: 90vh;
+                border-radius: 15px;
+            }
+            
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
 </head>
 <body>
-  <header>AI Core Engine — نواة بسام الذكية 🚀</header>
-  <main>
-    <div class="card">
-      <div id="chat">
-        <div class="bot">مرحبًا 👋 أنا نواة بسام الذكية. اسألني أي شيء!</div>
-      </div>
+    <div class="chat-container">
+        <!-- رأس الشات -->
+        <div class="chat-header">
+            <h1>🧠 نواة بسّام</h1>
+            <p>ذكي • متعلم • سريع الاستجابة</p>
+        </div>
 
-      <div class="toolbar">
-        <button class="ghost" onclick="quickBuild()">⚙️ فريق الإنشاء السريع</button>
-        <button class="ghost" onclick="teach()">🧠 أضف معلومة</button>
-      </div>
+        <!-- منطقة الرسائل -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- رسالة ترحيب من البوت -->
+            <div class="message bot-message">
+                مرحباً! 👋<br>
+                أنا النواة الذكية الجاهزة لمساعدتك في البرمجة، البحث، وتحليل البيانات.
+                <div class="message-time" id="currentTime"></div>
+            </div>
+        </div>
 
-      <form id="f">
-        <input id="msg" type="text" placeholder="اكتب رسالتك هنا..." autocomplete="off" />
-        <button type="submit">إرسال 🚀</button>
-      </form>
+        <!-- مؤشر الكتابة -->
+        <div class="typing-indicator" id="typingIndicator">
+            البوت يكتب...
+        </div>
 
-      <div id="sources"></div>
+        <!-- منطقة الإدخال -->
+        <div class="chat-input-container">
+            <input 
+                type="text" 
+                class="chat-input" 
+                id="messageInput" 
+                placeholder="اكتب رسالتك هنا..."
+                maxlength="500"
+            >
+            <button class="send-button" onclick="sendMessage()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="white"/>
+                </svg>
+            </button>
+        </div>
     </div>
-    <footer>Bassam AI © 2025 — نظام الذكاء الذاتي</footer>
-  </main>
 
-<script>
-const chat = document.getElementById('chat');
-const sources = document.getElementById('sources');
-document.getElementById('f').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const inp = document.getElementById('msg');
-  const q = (inp.value || '').trim();
-  if(!q) return;
-  chat.innerHTML += `<div class="you">${escapeHTML(q)}</div>`;
-  inp.value = "";  sources.innerHTML = "";
-  try{
-    const r = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({message:q})
-    });
-    const text = await r.text(); let j;
-    try{ j = JSON.parse(text); }catch(_){
-      chat.innerHTML += `<div class="bot">❌ حدث خطأ داخلي أثناء المعالجة.</div>`; return;
-    }
-    if(!j.ok){ chat.innerHTML += `<div class="bot">❌ تعذر إكمال الطلب (${j.error||'خطأ'}).</div>`; return; }
-    chat.innerHTML += `<div class="bot">${(j.reply||'').replace(/\n/g,'<br>')}</div>`;
-    sources.innerHTML = (j.sources||[]).map(s=>`<a target="_blank" href="${s.url}">🔗 ${escapeHTML(s.title||s.url)}</a>`).join('');
-    chat.scrollTop = chat.scrollHeight;
-  }catch(err){
-    chat.innerHTML += `<div class="bot">❌ مشكلة اتصال بالخادم.</div>`;
-  }
-});
+    <script>
+        // دالة للحصول على الوقت الحالي
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString('ar-EG', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
+        }
 
-async function quickBuild(){
-  const goal = prompt("ما الهدف؟ (مثال: أنشئ صفحة هبوط لمتجر قهوة)");
-  if(!goal) return;
-  const urlsStr = prompt("ضع روابط (اختياري) مفصولة بفواصل ,");
-  const urls = urlsStr ? urlsStr.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  const r = await fetch('/api/team/build', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({goal, urls})
-  });
-  const j = await r.json();
-  if(!j.ok){ alert("فشل الإنشاء: "+(j.error||"")); return; }
-  const fileList = Object.keys(j.files||{}).map(k=>`• ${k} (${(j.files[k]||'').length} chars)`).join('\n');
-  const plan = (j.plan||[]).map(x=>"- "+x).join('\n');
-  alert("الخطة:\n"+plan+"\n\nالملفات:\n"+fileList+"\n\nالمصادر: "+(j.sources||[]).length+" رابط");
-  // عرض ملف رئيسي إن وجد:
-  if(j.files && j.files["index.html"]){
-    chat.innerHTML += `<div class="bot"><b>تم إنشاء index.html:</b><br><pre><code>${escapeHTML(j.files["index.html"])}</code></pre></div>`;
-  }
-}
+        // تحديث وقت الرسالة الترحيبية
+        document.getElementById('currentTime').textContent = getCurrentTime();
 
-async function teach(){
-  const t = prompt("اكتب المعلومة التي تريد حفظها:");
-  if(!t) return;
-  const r = await fetch('/api/learn', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:t, source:"manual"})});
-  const j = await r.json();
-  chat.innerHTML += `<div class="bot">${j.ok ? "✅ تم الحفظ في الذاكرة." : "❌ لم يتم الحفظ."}</div>`;
-}
+        // دالة إرسال الرسالة
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            const chatMessages = document.getElementById('chatMessages');
+            const typingIndicator = document.getElementById('typingIndicator');
+            
+            // إضافة رسالة المستخدم
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message user-message';
+            userMessageDiv.innerHTML = `
+                ${message}
+                <div class="message-time">${getCurrentTime()}</div>
+            `;
+            chatMessages.appendChild(userMessageDiv);
+            
+            // مسح حقل الإدخال
+            input.value = '';
+            
+            // إظهار مؤشر الكتابة
+            typingIndicator.style.display = 'block';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            try {
+                // إرسال الرسالة إلى الخادم
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                
+                // إخفاء مؤشر الكتابة
+                typingIndicator.style.display = 'none';
+                
+                // إضافة رد البوت
+                if (data.ok) {
+                    const botMessageDiv = document.createElement('div');
+                    botMessageDiv.className = 'message bot-message';
+                    botMessageDiv.innerHTML = `
+                        ${data.reply.replace(/\n/g, '<br>')}
+                        <div class="message-time">${getCurrentTime()}</div>
+                    `;
+                    chatMessages.appendChild(botMessageDiv);
+                } else {
+                    const errorMessageDiv = document.createElement('div');
+                    errorMessageDiv.className = 'message bot-message';
+                    errorMessageDiv.innerHTML = `
+                        ❌ حدث خطأ في المعالجة<br>
+                        <small>${data.error || 'حاول مرة أخرى'}</small>
+                        <div class="message-time">${getCurrentTime()}</div>
+                    `;
+                    chatMessages.appendChild(errorMessageDiv);
+                }
+                
+            } catch (error) {
+                // إخفاء مؤشر الكتابة وإظهار خطأ
+                typingIndicator.style.display = 'none';
+                
+                const errorMessageDiv = document.createElement('div');
+                errorMessageDiv.className = 'message bot-message';
+                errorMessageDiv.innerHTML = `
+                    ❌ خطأ في الاتصال بالخادم<br>
+                    <small>تأكد من اتصال الإنترنت</small>
+                    <div class="message-time">${getCurrentTime()}</div>
+                `;
+                chatMessages.appendChild(errorMessageDiv);
+            }
+            
+            // التمرير إلى الأسفل
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
 
-function escapeHTML(s){ return (s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
-</script>
+        // إرسال بالزر Enter
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // التركيز على حقل الإدخال عند التحميل
+        document.getElementById('messageInput').focus();
+
+        // دالة لمسح الشات (يمكن إضافتها لزر في المستقبل)
+        function clearChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="message bot-message">
+                    مرحباً! 👋<br>
+                    أنا النواة الذكية الجاهزة لمساعدتك في البرمجة، البحث، وتحليل البيانات.
+                    <div class="message-time">${getCurrentTime()}</div>
+                </div>
+            `;
+        }
+    </script>
 </body>
 </html>
