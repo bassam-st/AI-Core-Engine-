@@ -1,4 +1,3 @@
-# core/brain.py — دماغ: بحث + ويكي + كود + فريق أكواد + تعلّم
 from __future__ import annotations
 from typing import List, Tuple
 from core.memory import search_memory, add_fact, save_conv
@@ -27,11 +26,19 @@ def _escape_html(s: str) -> str:
 
 def _is_code_intent(q: str) -> bool:
     nq = _normalize_ar(q)
-    return any(w in nq for w in ["كود","اكواد","برمجه","برمج","شفره","javascript","python","html","css","sql","java","react","vue","go","rust","dart","c++","c#","php","kotlin","swift"])
+    code_words = ["كود","اكواد","برمجه","برمج","شفره","دالة","function"]
+    tech_words = ["javascript","python","html","css","sql","java","react","vue","go","rust","dart","c++","c#","php","kotlin","swift"]
+    return any(w in nq for w in code_words + tech_words)
 
 def _is_project_intent(q: str) -> bool:
     nq = _normalize_ar(q)
-    return any(w in nq for w in ["مشروع","موقع","تطبيق","api","خادم","سيرفر","landing","صفحه","صفحة"])
+    project_words = ["مشروع","موقع","تطبيق","api","خادم","سيرفر","landing","صفحه","صفحة","نظام"]
+    return any(w in nq for w in project_words)
+
+def _should_learn(text: str) -> bool:
+    if len(text) < 30: return False
+    if any(word in text for word in ["خطأ", "error", "لا أعرف", "لم أجد"]): return False
+    return True
 
 def _summarize_snippets(snippets: List[str], max_lines: int = 6) -> List[str]:
     sents: List[str] = []
@@ -61,41 +68,50 @@ def chat_answer(q: str) -> Tuple[str, List[dict]]:
 
     # 0.5) نية مشروع/كود — قبل أي بحث
     if _is_project_intent(q):
-        proj = build_project(q)
-        if proj.get("ok"):
-            files = proj.get("files", {})
-            names = list(files.keys())
-            show = ""
-            if names:
-                first = names[0]
-                show = f"<pre><code>{_escape_html(files[first])}</code></pre>"
-            reply = "🧩 تم إنشاء مشروع أوّلي.\n" \
-                    f"- الملفات: {', '.join(names) or 'لا يوجد'}\n" \
-                    f"- ملاحظات: {len(proj.get('issues', []))}\n" \
-                    f"- نصيحة: {proj.get('tips','')}\n\n" + show
-            save_conv(q, reply)
-            # نتعلم من المخرجات
-            for n in names[:3]:
-                add_fact(f"ملف مشروع: {n} ({len(files[n])} chars).", source="code-team")
-            return reply, []
+        try:
+            proj = build_project(q)
+            if proj.get("ok"):
+                files = proj.get("files", {})
+                names = list(files.keys())
+                show = ""
+                if names:
+                    first = names[0]
+                    show = f"<pre><code>{_escape_html(files[first])}</code></pre>"
+                reply = "🧩 تم إنشاء مشروع أوّلي.\n" \
+                        f"- الملفات: {', '.join(names) or 'لا يوجد'}\n" \
+                        f"- ملاحظات: {len(proj.get('issues', []))}\n" \
+                        f"- نصيحة: {proj.get('tips','')}\n\n" + show
+                save_conv(q, reply)
+                for n in names[:3]:
+                    add_fact(f"ملف مشروع: {n} ({len(files[n])} chars).", source="code-team")
+                return reply, []
+        except Exception as e:
+            print(f"خطأ في بناء المشروع: {e}")
 
     if _is_code_intent(q):
-        result = generate_code(q)
-        code, lang, title = result["code"], result["lang"], result["title"]
-        reply = f"🔧 {title}\n\n<pre><code>{_escape_html(code)}</code></pre>"
-        add_fact(f"مثال كود {lang}: {title}.", source="codegen")
-        add_fact(f"مقتطف {lang}: {code.strip()[:800]}", source="codegen")
-        save_conv(q, reply)
-        return reply, []
+        try:
+            result = generate_code(q)
+            code, lang, title = result["code"], result["lang"], result["title"]
+            reply = f"🔧 {title}\n\n<pre><code>{_escape_html(code)}</code></pre>"
+            if _should_learn(code):
+                add_fact(f"مثال كود {lang}: {title}.", source="codegen")
+                add_fact(f"مقتطف {lang}: {code.strip()[:800]}", source="codegen")
+            save_conv(q, reply)
+            return reply, []
+        except Exception as e:
+            print(f"خطأ في توليد الكود: {e}")
 
-    # 1) ذاكرة
-    mem_hits = search_memory(q, limit=5)
+    # 1) ذاكرة محسنة
+    mem_hits = search_memory(q, limit=8)
     mem_texts = [h["text"] for h in mem_hits]
 
-    # 2) بحث ويب (DuckDuckGo + ويكي fallback)
+    # 2) بحث ويب
     need_web = not mem_hits or (mem_hits and mem_hits[0]["score"] < 1.5)
     try: web_results = web_search(q, max_results=6) if need_web else []
-    except Exception: web_results = []
+    except Exception as e: 
+        print(f"خطأ في البحث: {e}")
+        web_results = []
+    
     page_texts: List[str] = []
     for r in web_results[:3]:
         u = r.get("url"); 
@@ -114,7 +130,16 @@ def chat_answer(q: str) -> Tuple[str, List[dict]]:
 
     opener = OPENERS[(len(mem_texts)+len(page_texts)) % len(OPENERS)]
     reply = f"{opener}\n- " + "\n- ".join(summary)
+    
+    # تعلم تلقائي من الردود الجيدة
     for line in summary[:3]:
-        if len(line) > 40: add_fact(line, source="autolearn")
+        if _should_learn(line): 
+            add_fact(line, source="autolearn")
+    
     save_conv(q, reply)
     return reply, _format_sources(web_results[:5])
+
+def trigger_learning():
+    from core.learn_loop import continuous_learning_pipeline
+    result = continuous_learning_pipeline()
+    return f"🤖 تعلمت {result['total_learned']} معلومة جديدة!"
