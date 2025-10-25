@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from core.brain import chat_answer
 from core.memory import init_db, add_fact
-from core.team import build_project  # <= منسّق الفريق (Planner/Researcher/Developer/Reviewer)
+from core.code_team import build_project  # ✅ الصحيح: code_team
 
 app = FastAPI(title="AI Core Engine — Bassam", version="1.2.0")
 
@@ -51,7 +51,10 @@ async def api_learn(request: Request):
         add_fact(txt, source=src)
         return {"ok": True, "added": 1}
     except Exception as e:
-        return JSONResponse(status_code=200, content={"ok": False, "error": "internal_error", "detail": str(e)[:300]})
+        return JSONResponse(
+            status_code=200,
+            content={"ok": False, "error": "internal_error", "detail": str(e)[:300]},
+        )
 
 # فريق الإنشاء: يخطّط/يبحث/ينتج ملفات
 @app.post("/api/team/build")
@@ -59,15 +62,16 @@ async def api_team_build(request: Request):
     try:
         data = await request.json()
         goal = (data.get("goal") or "").strip()
-        urls = data.get("urls") or []
+        # urls = data.get("urls") or []  # متروك للنسخات المستقبلية إن أردت تمرير مصادر
         if not goal:
             return {"ok": False, "error": "empty_goal"}
-        result = build_project(goal, urls)
+        result = build_project(goal)  # ✅ دالة الفريق تستقبل وصف الهدف فقط
         return result
     except Exception as e:
-        return JSONResponse(status_code=200, content={
-            "ok": False, "error": "internal_error", "detail": str(e)[:300]
-        })
+        return JSONResponse(
+            status_code=200,
+            content={"ok": False, "error": "internal_error", "detail": str(e)[:300]},
+        )
 
 # اختبار
 @app.get("/ping")
