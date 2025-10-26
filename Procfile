@@ -1,2 +1,1 @@
-web: gunicorn main:app
-worker: python core/background_worker.py
+web: uvicorn main:app --host 0.0.0.0 --port $PORT
