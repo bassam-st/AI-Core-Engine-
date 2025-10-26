@@ -2,10 +2,20 @@ fastapi==0.115.4
 uvicorn==0.32.0
 pydantic==2.9.2
 pydantic-settings==2.6.1
-jinja2==3.1.4
+orjson==3.10.7
 requests==2.32.3
+python-multipart==0.0.9
+jinja2==3.1.4
+
+# NLP / ML (خفة على CPU)
+nltk==3.9.1
+sumy==0.11.0
+scikit-learn==1.5.2
+scipy==1.11.4
+numpy==1.26.4
+rank-bm25==0.2.2
+
+# RAG + Web
 duckduckgo_search==6.2.6
 beautifulsoup4==4.12.3
-rank-bm25==0.2.2
-orjson==3.10.7
-python-multipart==0.0.9
+PyPDF2==3.0.1
