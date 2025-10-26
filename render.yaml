@@ -1,7 +1,17 @@
 services:
   - type: web
-    name: al-core-engine-free
+    name: ai-core-engine
     env: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
+    plan: starter
+    buildCommand: |
+      pip install -r requirements.txt
+      python -c "import nltk; nltk.download('punkt_tab', quiet=True); nltk.download('vader_lexicon', quiet=True)"
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: ENGINE_DB
+        value: /opt/render/project/src/data/engine.db
+    disk:
+      name: engine-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 2
