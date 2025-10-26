@@ -7,16 +7,18 @@ class AnswerSynthesizer:
 
         parts = []
         if context:
-            parts.append(f"### سياق محلي\n{ (textwrap.shorten(context, width=1500, placeholder=' …')) }")
+            parts.append("### سياق محلي\n" + textwrap.shorten(context, width=1500, placeholder=" …"))
         if web_snippets:
             parts.append("### مقتطفات من الويب\n" + "\n".join(web_snippets[:5]))
         if wiki:
-            parts.append(f"### خلاصة ويكي\n{wiki[:600]}…")
+            parts.append("### خلاصة ويكي\n" + (wiki[:600] + "…"))
+
+        merged_parts = "\n\n".join(parts) if parts else ""
 
         return f"""# الإجابة
 **النية:** {intent} | **المشاعر:** {sentiment}
 
-{'\n\n'.join(parts)}
+{merged_parts}
 
 ## خلاصة مركبة
 - تم بناء الإجابة من المراجع أعلاه دون استخدام مفاتيح خارجية.
