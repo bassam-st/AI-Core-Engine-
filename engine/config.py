@@ -1,16 +1,21 @@
 import os
+from dataclasses import dataclass
 
-class cfg:
-    ROOT = os.path.dirname(os.path.dirname(__file__))
-    # على Render نستخدم المسار الثابت من env، محليًا نستخدم data/
-    DATA_DIR = os.environ.get("ENGINE_DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
-    CORPUS_DIR = os.path.join(DATA_DIR, "corpus")
-    INDEX_DIR  = os.path.join(DATA_DIR, "index")
-    INTENT_DIR = os.path.join(DATA_DIR, "intents")
-    MEM_DIR    = os.path.join(DATA_DIR, "memory")
+@dataclass
+class Config:
+    ROOT: str = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    DATA_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+    CORPUS_DIR: str = os.path.join(DATA_DIR, "corpus")
+    DB_PATH: str = os.path.join(DATA_DIR, "memory.db")
+    INDEX_DIR: str = os.path.join(DATA_DIR, "index")
+    INTENT_PATH: str = os.path.join(DATA_DIR, "intent.joblib")
 
-    DB_PATH    = os.environ.get("ENGINE_DB", os.path.join(DATA_DIR, "engine.db"))
+    GOOGLE_CSE_ID: str = os.environ.get("GOOGLE_CSE_ID", "")
+    GOOGLE_API_KEY: str = os.environ.get("GOOGLE_API_KEY", "")
 
-    # مفاتيح التفعيل الداخلية
-    USE_TFIDF = True     # بجانب BM25
-    SUM_SENTENCES = 8    # عدد جمل التلخيص
+cfg = Config()
+
+# تأكد من المجلدات
+os.makedirs(cfg.DATA_DIR, exist_ok=True)
+os.makedirs(cfg.CORPUS_DIR, exist_ok=True)
+os.makedirs(cfg.INDEX_DIR, exist_ok=True)
