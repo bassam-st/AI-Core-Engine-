@@ -1,42 +1,39 @@
-# engine/web_search.py
 import os
 import requests
 from typing import List, Dict
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
-GOOGLE_CSE_ID  = os.getenv("GOOGLE_CSE_ID", "").strip()
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "").strip()
 
 class WebSearchError(Exception):
     pass
 
 def google_cse_search(query: str, num: int = 5) -> List[Dict]:
-    """
-    يبحث عبر Google Programmable Search Engine ويعيد قائمة نتائج:
-    [{ 'title': str, 'link': str, 'snippet': str }]
-    """
+    """البحث عبر Google Custom Search API"""
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        raise WebSearchError("Google API key or CSE ID missing. Set GOOGLE_API_KEY and GOOGLE_CSE_ID.")
+        raise WebSearchError("مفاتيح GOOGLE_API_KEY أو GOOGLE_CSE_ID غير مضبوطة.")
 
-    url = "https://www.googleapis.com/customsearch/v1"
+    endpoint = "https://www.googleapis.com/customsearch/v1"
     params = {
         "key": GOOGLE_API_KEY,
         "cx": GOOGLE_CSE_ID,
         "q": query,
-        "num": max(1, min(num, 10)),  # حد جوجل 10
+        "num": max(1, min(num, 10)),
         "safe": "off",
-        "hl": "ar",  # نتائج عربية قدر الإمكان
+        "hl": "ar"
     }
-    r = requests.get(url, params=params, timeout=20)
-    if r.status_code != 200:
-        raise WebSearchError(f"Google CSE HTTP {r.status_code}: {r.text[:300]}")
 
-    data = r.json()
+    resp = requests.get(endpoint, params=params, timeout=20)
+    if resp.status_code != 200:
+        raise WebSearchError(f"خطأ في الاتصال بـ Google ({resp.status_code})")
+
+    data = resp.json()
     items = data.get("items", []) or []
     results = []
-    for it in items:
+    for item in items:
         results.append({
-            "title": it.get("title", ""),
-            "link": it.get("link", ""),
-            "snippet": it.get("snippet", "") or it.get("htmlSnippet", ""),
+            "title": item.get("title", ""),
+            "link": item.get("link", ""),
+            "snippet": item.get("snippet", "")
         })
     return results
