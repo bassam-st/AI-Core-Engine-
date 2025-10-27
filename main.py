@@ -4,6 +4,9 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import List
 import os
+from pathlib import Path
+
+from starlette.staticfiles import StaticFiles
 
 from engine.config import cfg
 from engine.retriever import Retriever
@@ -20,8 +23,14 @@ from engine.coder import Scaffolder
 APP_TITLE = "النواة الذكية الاحترافية - Bassam"
 app = FastAPI(title=APP_TITLE)
 
-# تهيئة مجلد البيانات
+# تهيئة مجلدات البيانات والتصدير
 os.makedirs(cfg.DATA_DIR, exist_ok=True)
+EXPORT_DIR = Path(cfg.DATA_DIR) / "exports"
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+# خدمة ملفات التصدير كستاتيك (للتحميل المباشر)
+# أمثلة: /exports/fastapi-my-app-20250101-120000.zip
+app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR), html=False), name="exports")
 
 # مكونات النواة
 retriever = Retriever()
@@ -41,10 +50,16 @@ PREFER_GOOGLE = os.environ.get("USE_GOOGLE_CSE", "1").strip().lower() in ("1", "
 def _startup():
     try:
         init_db()
+    except Exception as e:
+        print("DB init error:", e)
+    try:
         retriever.rebuild_index()
+    except Exception as e:
+        print("Retriever init error:", e)
+    try:
         intent_model.load_or_init()
     except Exception as e:
-        print("Startup error:", e)
+        print("Intent init error:", e)
 
 # ---------- نماذج ----------
 class ChatRequest(BaseModel):
@@ -68,7 +83,7 @@ class StyleRequest(BaseModel):
     mode: str
 
 class ScaffoldRequest(BaseModel):
-    kind: str   # fastapi | html
+    kind: str   # fastapi | telegram-bot | html
     name: str
 
 # ---------- صفحات ----------
@@ -76,17 +91,21 @@ class ScaffoldRequest(BaseModel):
 def home():
     return f"""
     <html><head><meta charset="utf-8"><title>{APP_TITLE}</title>
-    <style>body{{font-family:Arial;direction:rtl;text-align:center;margin-top:40px}}</style></head>
+    <style>
+      body{{font-family:Arial;direction:rtl;text-align:center;margin-top:40px}}
+      a.btn{{display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;color:#fff;margin:4px}}
+      .g{{background:#0b7}} .s{{background:#555}} .p{{background:#6a5acd}} .c{{background:#7c3aed}}
+    </style></head>
     <body>
       <h2>🧠 {APP_TITLE}</h2>
-      <p>بحث ذكي، تلخيص، تحليل نية/مشاعر، توليد، ذاكرة وتعلم ذاتي.</p>
+      <p>بحث ذكي، تلخيص، تحليل نية/مشاعر، توليد، ذاكرة وتعلّم ذاتي + توليد مشاريع جاهزة.</p>
       <p>
-        <a href="/ui" style="background:#0b7;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;">واجهة النواة</a>
-        &nbsp;
-        <a href="/docs" style="background:#555;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;">Swagger</a>
-        &nbsp;
-        <a href="/google-ui" style="background:#6a5acd;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;">Google API بحث ذكي عبر</a>
+        <a class="btn g" href="/ui">واجهة النواة</a>
+        <a class="btn s" href="/docs">Swagger</a>
+        <a class="btn p" href="/google-ui">بحث عبر Google API</a>
+        <a class="btn c" href="/code/ui">إنشاء تطبيق/نواة</a>
       </p>
+      <p style="font-size:12px;color:#666">لتحميل المشاريع المنشأة: /exports/&lt;اسم-الملف&gt;.zip</p>
     </body></html>
     """
 
@@ -230,6 +249,55 @@ def google_ui(q: str = ""):
   <p><a href="/ui">⬅ العودة</a></p>
 </div></body></html>"""
 
+@app.get("/code/ui", response_class=HTMLResponse)
+def code_ui():
+    return """
+<!doctype html><html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>إنشاء تطبيق</title>
+<style>
+ body{font-family:system-ui;background:#0f1222;color:#fff;margin:0;padding:24px}
+ .card{background:#161a2d;border-radius:14px;padding:16px;max-width:720px;margin:auto}
+ input,select,button{padding:12px;border-radius:10px;border:0;font-size:16px}
+ input,select{width:100%;margin:6px 0;background:#0e1120;color:#fff;border:1px solid #2a3052}
+ button{background:#10b981;color:#041016}
+ .muted{color:#93a0c9;font-size:13px}
+</style></head>
+<body>
+<div class="card">
+  <h2>إنشاء تطبيق/نواة</h2>
+  <label>النوع:</label>
+  <select id="kind">
+    <option value="fastapi">FastAPI</option>
+    <option value="telegram-bot">Telegram Bot</option>
+    <option value="html">HTML Widget</option>
+  </select>
+  <label>الاسم:</label>
+  <input id="name" placeholder="my-smart-app"/>
+  <button onclick="go()">إنشاء</button>
+  <p id="res" class="muted"></p>
+  <p class="muted">سيُنشأ ملف ZIP في /exports ويمكن تنزيله مباشرة.</p>
+  <p><a href="/">⬅ الرئيسية</a></p>
+</div>
+<script>
+async function go(){
+  const kind=document.getElementById('kind').value;
+  const name=document.getElementById('name').value.trim()||'my-app';
+  const p=document.getElementById('res');
+  p.textContent='جارٍ الإنشاء...';
+  try{
+    const r=await fetch('/code/scaffold',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({kind,name})});
+    const data=await r.json();
+    if(!data.ok){ p.textContent='فشل: '+(data.error||''); return; }
+    const zip = data.zip_path.split('/').slice(-1)[0];
+    p.innerHTML = 'تم الإنشاء ✅ — حمل الملف: <a style="color:#9be" href="/exports/'+zip+'">'+zip+'</a>';
+  }catch(e){ p.textContent='خطأ اتصال'; }
+}
+</script>
+</body></html>
+    """
+
 # ---------- API ----------
 @app.get("/ping")
 def ping():
@@ -276,12 +344,15 @@ def chat(req: ChatRequest):
     if req.style:
         generator.set_style(req.style)
 
+    # نية + مشاعر
     intent = intent_model.predict(text)
     senti = sentiment.analyze(text)
 
+    # استرجاع محلي
     hits = retriever.search(text, top_k=req.top_k)
     local_context = "\n\n".join(h["text"] for h in hits) if hits else ""
 
+    # ويب
     snippets = []
     web_used = "none"
     if req.use_web:
@@ -305,10 +376,12 @@ def chat(req: ChatRequest):
 
     wiki = wiki_summary_ar(text) if req.use_wiki else ""
 
+    # تلخيص سياق محلي
     context_for_answer = local_context
     if req.summarize and local_context:
         context_for_answer = summarizer.combine_and_summarize([h["text"] for h in hits])
 
+    # توليد الإجابة
     answer = generator.answer(
         query=text,
         context=context_for_answer,
@@ -318,6 +391,7 @@ def chat(req: ChatRequest):
         wiki=wiki
     )
 
+    # ذاكرة + تدريب تلقائي
     if req.save:
         memory.add(req.user_id, text, answer, intent, senti.get("label", "neutral"))
     auto_trainer.maybe_learn(text, intent)
@@ -347,6 +421,8 @@ def train_auto():
 def code_scaffold(req: ScaffoldRequest):
     try:
         path = scaffolder.scaffold(req.kind, req.name)
-        return {"ok": True, "zip_path": path}
+        # نحول مسار الملف إلى رابط تحميل مباشر:
+        fname = Path(path).name
+        return {"ok": True, "zip_path": path, "download_url": f"/exports/{fname}"}
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
