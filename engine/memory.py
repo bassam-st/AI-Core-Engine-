@@ -1,38 +1,26 @@
-import os, json, time, sqlite3
-from typing import List, Tuple
-from engine.config import cfg
-
-os.makedirs(cfg.MEM_DIR, exist_ok=True)
-
-def _conn():
-    return sqlite3.connect(cfg.DB_PATH)
+import sqlite3, os, time
+from .config import cfg
 
 def init_db():
-    con = _conn()
+    os.makedirs(cfg.DATA_DIR, exist_ok=True)
+    con = sqlite3.connect(cfg.DB_PATH)
     cur = con.cursor()
-    cur.execute("""CREATE TABLE IF NOT EXISTS conversation(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS memory(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts INTEGER, user_id TEXT, message TEXT, answer TEXT, intent TEXT, sentiment TEXT
+        user_id TEXT, msg TEXT, answer TEXT, intent TEXT, sentiment TEXT, ts REAL
     )""")
-    con.commit()
-    con.close()
+    con.commit(); con.close()
 
 class ConversationMemory:
-    def add(self, user_id: str, message: str, answer: str, intent: str, sentiment: str):
-        con = _conn()
-        cur = con.cursor()
-        cur.execute("INSERT INTO conversation(ts,user_id,message,answer,intent,sentiment) VALUES(?,?,?,?,?,?)",
-                    (int(time.time()), user_id, message, answer, intent, sentiment))
-        con.commit()
-        con.close()
+    def add(self, user_id: str, msg: str, answer: str, intent: str, sentiment: str):
+        con = sqlite3.connect(cfg.DB_PATH)
+        con.execute("INSERT INTO memory(user_id,msg,answer,intent,sentiment,ts) VALUES(?,?,?,?,?,?)",
+                    (user_id, msg, answer, intent, sentiment, time.time()))
+        con.commit(); con.close()
 
-    def get_context(self, user_id: str, limit: int = 5) -> str:
-        con = _conn()
-        cur = con.cursor()
-        cur.execute("SELECT message, answer FROM conversation WHERE user_id=? ORDER BY id DESC LIMIT ?", (user_id, limit))
-        rows = cur.fetchall()
-        con.close()
-        parts = []
-        for m, a in rows:
-            parts.append(f"س: {m}\nج: {a[:300]}")
-        return "\n\n".join(reversed(parts))
+    def all(self, limit: int = 200):
+        con = sqlite3.connect(cfg.DB_PATH)
+        cur = con.execute("SELECT user_id,msg,answer,intent,sentiment,ts FROM memory ORDER BY id DESC LIMIT ?", (limit,))
+        rows = cur.fetchall(); con.close()
+        return rows
