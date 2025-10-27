@@ -1,18 +1,15 @@
-from typing import Dict
-import nltk
+def _score(text: str) -> float:
+    # قاموس صغير للميل الإيجابي/السلبي
+    pos = ["ممتاز","جيد","رائع","شكرا","سعيد","افضل","جميل","نجاح"]
+    neg = ["سيء","حزين","مشكل","خطأ","غضب","فشل","كارث","ضعيف"]
+    s = text or ""
+    sc = sum(1 for w in pos if w in s) - sum(1 for w in neg if w in s)
+    return sc
 
 class SentimentAnalyzer:
-    def __init__(self):
-        try:
-            from nltk.sentiment import SentimentIntensityAnalyzer
-            self.vader = SentimentIntensityAnalyzer()
-        except Exception:
-            self.vader = None
-
-    def analyze(self, text: str) -> Dict[str, float]:
-        if not self.vader or not text.strip():
-            return {"label": "neutral", "score": 0.0}
-        scores = self.vader.polarity_scores(text)
-        comp = scores.get("compound", 0.0)
-        label = "positive" if comp >= 0.2 else "negative" if comp <= -0.2 else "neutral"
-        return {"label": label, "score": float(comp)}
+    def analyze(self, text: str) -> dict:
+        s = _score(text)
+        if s > 0: label = "positive"
+        elif s < 0: label = "negative"
+        else: label = "neutral"
+        return {"label": label, "score": s}
