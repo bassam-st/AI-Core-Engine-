@@ -1,66 +1,29 @@
-# engine/generator.py
-import textwrap
-from engine.style import StyleModel
+from typing import List
 
 class AnswerSynthesizer:
-    """
-    يركّب الإجابة النهائية من:
-    - سياق محلي مسترجَع
-    - مقتطفات الويب
-    - خلاصة الويكي
-    ويمررها عبر StyleModel لإخراج أسلوب عربي بشري (ودود/رسمي/مختصر).
-    """
-
     def __init__(self):
-        # الوضع الافتراضي: ودود
-        self.styler = StyleModel(mode="friendly")
+        self.style = "friendly"
 
     def set_style(self, mode: str):
-        """تغيير الأسلوب أثناء التشغيل: friendly | formal | brief"""
-        self.styler.set_mode(mode)
+        if mode in ("friendly","formal","brief"):
+            self.style = mode
 
-    def answer(self, query: str, context: str, intent: str, sentiment: str,
-               web_snippets, wiki: str) -> str:
-        """
-        يجمّع المصادر ويولّد خلاصة مركبة، ثم ينسّق الأسلوب.
-        """
-        if not (context or web_snippets or wiki):
-            # لا يوجد سياق كافٍ
-            msg = (
-                "لم أجد سياقًا كافيًا بعد. "
-                "ارفع ملفاتك عبر /ingest أو /ingest/url أو فعّل البحث على الويب، ثم أعد المحاولة."
-            )
-            return self.styler.postprocess(msg, intent, sentiment)
+    def _style_wrap(self, text: str) -> str:
+        if self.style == "formal":
+            return "إليك خلاصة منظمة:\n\n" + text
+        if self.style == "brief":
+            return text
+        return "بكل ود، هذه الإجابة:\n\n" + text
 
+    def answer(self, *, query: str, context: str, intent: str, sentiment: str,
+               web_snippets: List[str], wiki: str) -> str:
         parts = []
-
         if context:
-            parts.append(
-                "### سياق محلي\n" +
-                textwrap.shorten(context, width=1500, placeholder=" …")
-            )
-
-        if web_snippets:
-            parts.append(
-                "### مقتطفات من الويب\n" +
-                "\n".join(web_snippets[:5])
-            )
-
+            parts.append("📚 من ملفاتك:\n" + context[:1200])
         if wiki:
-            parts.append(
-                "### خلاصة ويكي\n" +
-                (wiki[:600] + "…")
-            )
-
-        merged = "\n\n".join(parts)
-
-        raw = f"""# الإجابة
-**النية:** {intent} | **المشاعر:** {sentiment}
-
-{merged}
-
-## خلاصة مركّبة
-- تم تركيب الرد من المصادر أعلاه (محلية/ويب/ويكي) بدون مفاتيح مدفوعة افتراضيًا.
-- لرفع الدقة، أضف مستنداتك الخاصة عبر /ingest أو /ingest/url.
-"""
-        return self.styler.postprocess(raw, intent, sentiment)
+            parts.append("📘 من ويكيبيديا:\n" + wiki[:800])
+        if web_snippets:
+            parts.append("🌐 من الويب:\n" + "\n".join(web_snippets[:6]))
+        parts.append(f"\n🔎 النية المتوقعة: {intent} — الحالة: {sentiment}")
+        core = "\n\n".join(parts) if parts else "لم أعثر على سياق كافٍ، أستطيع البحث أكثر عند رغبتك."
+        return self._style_wrap(core)
