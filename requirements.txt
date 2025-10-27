@@ -12,3 +12,7 @@ trafilatura
 youtube-transcript-api
 yt-dlp
 tqdm
+httpx
+asyncio
+rank-bm25
+requests-cache
