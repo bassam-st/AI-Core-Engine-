@@ -1,195 +1,310 @@
 # engine/coder.py
 from __future__ import annotations
-import os, io, textwrap, zipfile, datetime
+import os, io, zipfile, textwrap, datetime
 from pathlib import Path
+from typing import Tuple
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-EXPORT_DIR = BASE_DIR / "data" / "exports"
+from .config import cfg
+
+# مجلد التصدير نفسه الذي نعرضه في /exports
+EXPORT_DIR = Path(cfg.DATA_DIR) / "exports"
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 class Scaffolder:
     """
-    مُوَلِّد مشاريع جاهزة: ينشئ مجلدات وملفات وتشغيل فوري.
-    الأنواع المدعومة: fastapi | telegram-bot | html
-    يعيد مسار ZIP جاهز للتحميل.
+    صانع هياكل مشاريع سريعة.
+    الأنواع المدعومة:
+      - fastapi
+      - fastapi-crud-jwt (جديد)
+      - telegram-bot
+      - html
+    يعيد مسار ملف ZIP النهائي داخل EXPORT_DIR.
     """
+
     def scaffold(self, kind: str, name: str) -> str:
         kind = (kind or "").strip().lower()
-        name = self._slug(name)
+        name = self._safe_name(name or "my-app")
 
-        if kind not in {"fastapi", "telegram-bot", "html"}:
-            raise ValueError("kind يجب أن يكون: fastapi | telegram-bot | html")
-
-        files: dict[str, str] = {}
         if kind == "fastapi":
-            files = self._tpl_fastapi(name)
+            files = self._fastapi_basic(name)
+        elif kind == "fastapi-crud-jwt":
+            files = self._fastapi_crud_jwt(name)
         elif kind == "telegram-bot":
-            files = self._tpl_telegram(name)
+            files = self._telegram_bot(name)
         elif kind == "html":
-            files = self._tpl_html_widget(name)
+            files = self._html_widget(name)
+        else:
+            raise ValueError(f"نوع غير مدعوم: {kind}")
 
-        # إنشاء ZIP داخل data/exports
-        stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        zip_path = EXPORT_DIR / f"{kind}-{name}-{stamp}.zip"
-        self._make_zip(files, zip_path)
-        return str(zip_path)
+        zip_path = self._write_zip(name, files)
+        return zip_path
 
-    # --------------- قوالب ---------------
+    # ------------------------- قوالب -------------------------
 
-    def _tpl_fastapi(self, name: str) -> dict[str, str]:
-        pkg = name.replace("-", "_")
+    def _fastapi_basic(self, name: str) -> dict:
+        app_py = textwrap.dedent(f"""
+        from fastapi import FastAPI
+        app = FastAPI(title="{name}")
+
+        @app.get("/")
+        def root():
+            return {{"ok": True, "app": "{name}"}}
+        """).strip()
+
+        req = "fastapi==0.115.0\nuvicorn==0.30.6\n"
         return {
-            f"{name}/README.md": textwrap.dedent(f"""
-            # {name} — FastAPI Starter
-
-            مشروع FastAPI جاهز للتشغيل على Render/Heroku أو محليًا.
-
-            ## التشغيل المحلي
-            ```bash
-            python -m venv .venv && . .venv/bin/activate
-            pip install -r requirements.txt
-            uvicorn {pkg}.app:app --reload --port 8000
-            ```
-            ثم افتح: http://127.0.0.1:8000/docs
-
-            ## نشر سريع على Render
-            - أضف المشروع كمستودع
-            - اضبط الأمر: `uvicorn {pkg}.app:app --host 0.0.0.0 --port 10000`
-            """).strip(),
-            f"{name}/requirements.txt": textwrap.dedent("""
-            fastapi==0.115.0
-            uvicorn==0.30.6
-            requests==2.32.3
-            """).strip(),
-            f"{name}/render.yaml": textwrap.dedent(f"""
-            services:
-              - type: web
-                name: {name}
-                env: python
-                plan: free
-                buildCommand: pip install -r requirements.txt
-                startCommand: uvicorn {pkg}.app:app --host 0.0.0.0 --port 10000
-            """).strip(),
-            f"{name}/.gitignore": textwrap.dedent("""
-            __pycache__/
-            .venv/
-            *.pyc
-            """).strip(),
-            f"{name}/{pkg}/__init__.py": "",
-            f"{name}/{pkg}/app.py": textwrap.dedent(f"""
-            from fastapi import FastAPI
-            from pydantic import BaseModel
-            import datetime, os
-
-            app = FastAPI(title="{name} — FastAPI Starter")
-
-            class Echo(BaseModel):
-                text: str
-
-            @app.get("/ping")
-            def ping():
-                return {{"ok": True, "time": datetime.datetime.utcnow().isoformat()+"Z"}}
-
-            @app.post("/echo")
-            def echo(e: Echo):
-                return {{"you_said": e.text, "env": dict(os.environ)}}
-            """).strip(),
+            f"{name}/app.py": app_py,
+            f"{name}/requirements.txt": req,
+            f"{name}/README.md": f"# {name}\\n\\nتشغيل محلي:\\n\\n```bash\\npip install -r requirements.txt\\nuvicorn app:app --reload\\n```\\n",
         }
 
-    def _tpl_telegram(self, name: str) -> dict[str, str]:
-        pkg = name.replace("-", "_")
+    def _fastapi_crud_jwt(self, name: str) -> dict:
+        # تطبيق CRUD بسيط لعناصر مع مصادقة JWT وSQLite
+        app_py = textwrap.dedent(f"""
+        from datetime import datetime, timedelta
+        from typing import List, Optional
+        from fastapi import FastAPI, Depends, HTTPException, status
+        from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+        from pydantic import BaseModel
+        from jose import jwt, JWTError
+        from passlib.context import CryptContext
+        from sqlalchemy import create_engine, Column, Integer, String, DateTime
+        from sqlalchemy.orm import sessionmaker, declarative_base, Session
+
+        SECRET_KEY = "change-me-please"
+        ALGORITHM = "HS256"
+        ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+        # قاعدة البيانات
+        SQLALCHEMY_DATABASE_URL = "sqlite:///./data.db"
+        engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={{"check_same_thread": False}})
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        Base = declarative_base()
+
+        class Item(Base):
+            __tablename__ = "items"
+            id = Column(Integer, primary_key=True, index=True)
+            title = Column(String, index=True)
+            description = Column(String, default="")
+            created_at = Column(DateTime, default=datetime.utcnow)
+
+        class User(Base):
+            __tablename__ = "users"
+            id = Column(Integer, primary_key=True, index=True)
+            username = Column(String, unique=True, index=True)
+            hashed_password = Column(String)
+
+        Base.metadata.create_all(bind=engine)
+
+        # مستخدم افتراضي: admin / admin
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        def _bootstrap_user():
+            db = SessionLocal()
+            try:
+                u = db.query(User).filter(User.username=="admin").first()
+                if not u:
+                    u = User(username="admin", hashed_password=pwd_context.hash("admin"))
+                    db.add(u); db.commit()
+            finally:
+                db.close()
+        _bootstrap_user()
+
+        oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+        app = FastAPI(title="{name} (CRUD+JWT)")
+
+        # نماذج
+        class ItemIn(BaseModel):
+            title: str
+            description: Optional[str] = ""
+        class ItemOut(ItemIn):
+            id: int
+            created_at: datetime
+            class Config:
+                orm_mode = True
+
+        class Token(BaseModel):
+            access_token: str
+            token_type: str = "bearer"
+
+        # تبعيات
+        def get_db():
+            db = SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        def authenticate(db: Session, username: str, password: str):
+            user = db.query(User).filter(User.username==username).first()
+            if not user: return None
+            if not pwd_context.verify(password, user.hashed_password): return None
+            return user
+
+        def create_access_token(data: dict, expires_delta: timedelta | None = None):
+            to_encode = data.copy()
+            expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+            to_encode.update({{"exp": expire}})
+            return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+        def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+            credentials_exception = HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={{"WWW-Authenticate": "Bearer"}},
+            )
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                username: str | None = payload.get("sub")
+                if username is None:
+                    raise credentials_exception
+            except JWTError:
+                raise credentials_exception
+            user = db.query(User).filter(User.username==username).first()
+            if user is None:
+                raise credentials_exception
+            return user
+
+        @app.post("/token", response_model=Token)
+        def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+            user = authenticate(db, form_data.username, form_data.password)
+            if not user:
+                raise HTTPException(status_code=400, detail="Incorrect username or password")
+            token = create_access_token({{"sub": user.username}})
+            return Token(access_token=token)
+
+        @app.get("/")
+        def root():
+            return {{"ok": True, "endpoints": ["/items", "/token"], "auth": "use Bearer token"}}
+
+        # CRUD محمي
+        @app.get("/items", response_model=List[ItemOut])
+        def list_items(db: Session = Depends(get_db), user=Depends(get_current_user)):
+            return db.query(Item).order_by(Item.id.desc()).all()
+
+        @app.post("/items", response_model=ItemOut)
+        def create_item(payload: ItemIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+            it = Item(title=payload.title, description=payload.description or "")
+            db.add(it); db.commit(); db.refresh(it)
+            return it
+
+        @app.get("/items/{{item_id}}", response_model=ItemOut)
+        def get_item(item_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+            it = db.query(Item).get(item_id)
+            if not it: raise HTTPException(404, "Not found")
+            return it
+
+        @app.delete("/items/{{item_id}}")
+        def delete_item(item_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+            it = db.query(Item).get(item_id)
+            if not it: raise HTTPException(404, "Not found")
+            db.delete(it); db.commit()
+            return {{"ok": True}}
+        """).strip()
+
+        req = textwrap.dedent("""
+        fastapi==0.115.0
+        uvicorn==0.30.6
+        python-multipart==0.0.9
+        passlib[bcrypt]==1.7.4
+        python-jose==3.3.0
+        sqlalchemy==2.0.36
+        pydantic==2.9.2
+        """).strip() + "\n"
+
+        readme = textwrap.dedent(f"""
+        # {name} — FastAPI + CRUD + JWT
+
+        ## تشغيل محلي
+        ```bash
+        python -m venv .venv && . .venv/bin/activate  # على ويندوز: .venv\\Scripts\\activate
+        pip install -r requirements.txt
+        uvicorn app:app --reload
+        ```
+        ### تسجيل الدخول
+        - Endpoint: `POST /token` (form-data: username=admin, password=admin)
+        - بعد الحصول على `access_token` استخدمه كـ Bearer في الطلبات إلى /items
+        """)
+
         return {
-            f"{name}/README.md": textwrap.dedent(f"""
-            # {name} — Telegram Bot (python-telegram-bot)
-
-            بوت تيليجرام بسيط.
-
-            ## الإعداد
-            1) أنشئ التوكن من @BotFather
-            2) ضع المتغير `TELEGRAM_BOT_TOKEN` في بيئة التشغيل أو ملف `.env`
-
-            ## تشغيل
-            ```bash
-            python -m venv .venv && . .venv/bin/activate
-            pip install -r requirements.txt
-            python {pkg}/bot.py
-            ```
-            """).strip(),
-            f"{name}/requirements.txt": textwrap.dedent("""
-            python-telegram-bot==21.6
-            python-dotenv==1.0.1
-            """).strip(),
-            f"{name}/.env.example": "TELEGRAM_BOT_TOKEN=put-your-token-here\n",
-            f"{name}/{pkg}/__init__.py": "",
-            f"{name}/{pkg}/bot.py": textwrap.dedent("""
-            import os
-            from dotenv import load_dotenv
-            from telegram import Update
-            from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
-            load_dotenv()
-            TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-
-            async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-                await update.message.reply_text("أهلًا! أرسل أي رسالة وسأكررها لك 🤖")
-
-            async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-                await update.message.reply_text(update.message.text)
-
-            def main():
-                if not TOKEN:
-                    raise RuntimeError("ضع TELEGRAM_BOT_TOKEN في .env أو البيئة")
-                app = ApplicationBuilder().token(TOKEN).build()
-                app.add_handler(CommandHandler("start", start))
-                app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-                app.run_polling()
-
-            if __name__ == "__main__":
-                main()
-            """).strip(),
+            f"{name}/app.py": app_py,
+            f"{name}/requirements.txt": req,
+            f"{name}/README.md": readme,
+            f"{name}/.gitignore": ".venv/\n__pycache__/\n*.db\n",
         }
 
-    def _tpl_html_widget(self, name: str) -> dict[str, str]:
+    def _telegram_bot(self, name: str) -> dict:
+        bot_py = textwrap.dedent(f"""
+        import os, requests, time
+
+        TOKEN = os.environ.get("TELEGRAM_TOKEN", "PUT-YOUR-TOKEN")
+        CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", None)
+
+        def send(msg: str, chat_id: str | None = CHAT_ID):
+            if not TOKEN or not chat_id:
+                print("ضع TELEGRAM_TOKEN و TELEGRAM_CHAT_ID في المتغيرات.")
+                return
+            requests.get("https://api.telegram.org/bot{{}}/sendMessage".format(TOKEN),
+                        params={{"chat_id": chat_id, "text": msg}})
+
+        if __name__ == "__main__":
+            print("Bot ready. CTRL+C للخروج.")
+            while True:
+                send("Hello from {name}!")
+                time.sleep(60)
+        """).strip()
+
+        req = "requests==2.32.3\n"
         return {
-            f"{name}/README.md": f"# {name} — HTML Widget\nافتح الملف `index.html` في المتصفح.",
-            f"{name}/index.html": textwrap.dedent("""
-            <!doctype html>
-            <html lang="ar" dir="rtl">
-            <head>
-              <meta charset="utf-8"/>
-              <meta name="viewport" content="width=device-width,initial-scale=1"/>
-              <title>Widget</title>
-              <style>
-                body{font-family:system-ui; background:#0f1222; color:#fff; margin:0; padding:40px}
-                .card{background:#161a2d; border-radius:14px; padding:18px; max-width:680px}
-                input,button{padding:10px; border-radius:10px; border:0}
-                input{width:70%} button{background:#10b981; color:#012}
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <h2>ودجت تفاعلي بسيط</h2>
-                <p>أدخل نصًا وسيظهر أسفله:</p>
-                <input id="t" placeholder="اكتب هنا..."/>
-                <button onclick="show()">عرض</button>
-                <pre id="out"></pre>
-              </div>
-              <script>function show(){out.textContent = t.value}</script>
-            </body>
-            </html>
-            """).strip(),
+            f"{name}/bot.py": bot_py,
+            f"{name}/requirements.txt": req,
+            f"{name}/README.md": f"# {name} (Telegram Bot)\\n\\nشغّل بـ:\\n```bash\\npython bot.py\\n```\\n",
         }
 
-    # --------------- أدوات ---------------
+    def _html_widget(self, name: str) -> dict:
+        index_html = textwrap.dedent(f"""
+        <!doctype html><html lang="ar" dir="rtl">
+        <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <title>{name}</title>
+        <style>body{{font-family:Arial;background:#0f1222;color:#fff;padding:20px}} .box{{background:#161a2d;border-radius:14px;padding:16px}}</style>
+        <div class="box">
+          <h2>عنصر واجهة — {name}</h2>
+          <p>مثال بسيط لودجت HTML.</p>
+          <input id="inp" placeholder="اكتب أي شيء"/>
+          <button onclick="go()">عرض</button>
+          <pre id="out"></pre>
+        </div>
+        <script>
+          function go(){{
+            const v=document.getElementById('inp').value||'—';
+            document.getElementById('out').textContent='أدخلت: '+v;
+          }}
+        </script>
+        </html>
+        """).strip()
 
-    def _make_zip(self, files: dict[str, str], zip_path: Path):
-        zip_path.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        return {
+            f"{name}/index.html": index_html,
+            f"{name}/README.md": f"# {name} (HTML Widget)\\nافتح index.html في المتصفح.\\n",
+        }
+
+    # ------------------------- أدوات -------------------------
+
+    def _write_zip(self, name: str, files: dict) -> str:
+        """يكتب القوالب إلى ZIP داخل EXPORT_DIR ويعيد المسار."""
+        ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        zip_name = f"{name}-{ts}.zip"
+        zip_path = EXPORT_DIR / zip_name
+
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             for rel, content in files.items():
                 data = content.encode("utf-8")
-                zf.writestr(rel, data)
+                zf.writestr(rel.replace("\\\\", "/"), data)
 
-    def _slug(self, s: str) -> str:
-        s = s.strip().lower().replace(" ", "-")
-        allowed = "abcdefghijklmnopqrstuvwxyz0123456789-_"
-        return "".join(ch for ch in s if ch in allowed) or "my-app"
+        return str(zip_path)
+
+    def _safe_name(self, s: str) -> str:
+        s = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in s.strip())
+        while "--" in s: s = s.replace("--", "-")
+        return s.strip("-_") or "my-app"
