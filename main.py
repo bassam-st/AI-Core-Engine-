@@ -79,7 +79,7 @@ class LiveAskRequest(BaseModel):
     include_steps: bool = True
     style: Optional[str] = None
 
-# === صفحات أساسية ===
+# === الصفحات الأساسية ===
 @app.get("/", response_class=HTMLResponse)
 def home():
     return f"""
