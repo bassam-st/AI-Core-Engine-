@@ -8,13 +8,7 @@ pypdf==4.3.1
 python-docx
 scikit-learn==1.5.2
 joblib==1.4.2
-git+https://github.com/adbar/trafilatura.git
-youtube-transcript-api
-yt-dlp
-tqdm
+jinja2
 httpx
-asyncio
-rank-bm25
-requests-cache
-openai
-lxml==4.9.3
+numpy
+tqdm
