@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 # === استيرادات النواة ===
@@ -21,6 +22,9 @@ from engine.trainer import AutoTrainer
 from engine.web import web_search, wiki_summary_ar, google_cse_search
 from engine.coder import Scaffolder
 from engine.web_agent import gather_web  # عامل الويب الجديد
+
+# === استيراد قسم المباريات ===
+from engine.sports import get_today_fixtures
 
 APP_TITLE = "النواة الذكية الاحترافية – Bassam"
 app = FastAPI(title=APP_TITLE)
@@ -50,6 +54,9 @@ def _startup():
         intent_model.load_or_init()
     except Exception as e:
         print("Startup issue:", e)
+
+# === تهيئة القوالب ===
+templates = Jinja2Templates(directory="templates")
 
 # === نماذج البيانات ===
 class ChatRequest(BaseModel):
@@ -90,6 +97,7 @@ def home():
       <p>
         <a href='/ui'>واجهة النواة</a> |
         <a href='/live-ui'>البحث الذكي المباشر</a> |
+        <a href='/ui/sports'>🏟️ مباريات اليوم</a> |
         <a href='/docs'>Swagger</a>
       </p>
     </body></html>
@@ -182,6 +190,25 @@ def ask_live(req: LiveAskRequest):
         "answer": answer,
         "sources": sources
     })
+
+# === صفحات وعروض قسم المباريات ===
+@app.get("/api/sports/today")
+async def api_sports_today(league: str | None = Query(default=None)):
+    return await get_today_fixtures(league_filter=league)
+
+@app.get("/ui/sports")
+async def ui_sports(request: Request, league: str | None = None):
+    return templates.TemplateResponse(
+        "sports_today.html",
+        {"request": request, "league": league or ""}
+    )
+
+@app.get("/ui/sports_player")
+async def ui_sports_player(request: Request, url: str | None = None):
+    return templates.TemplateResponse(
+        "sports_player.html",
+        {"request": request, "url": url or ""}
+    )
 
 # === فحص الصحة ===
 @app.get("/ping")
