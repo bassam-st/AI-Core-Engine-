@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<title>بث مباشر</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{margin:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}
+video{width:100%;height:auto;max-height:100vh}
+</style>
+</head>
+<body>
+<video id="player" controls autoplay></video>
+<script>
+const url = new URLSearchParams(location.search).get("url");
+const v = document.getElementById("player");
+if(url && url.startsWith("http")){
+  v.src = url;
+  v.play();
+}else{
+  document.body.innerHTML = "<h3 style='color:white'>لا يوجد رابط بث مباشر متاح لهذه المباراة.</h3>";
+}
+</script>
+</body>
+</html>

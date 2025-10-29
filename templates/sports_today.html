@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>مباريات اليوم</title>
+<style>
+ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}
+ .wrap{max-width:820px;margin:auto}
+ .row{border:1px solid #223; border-radius:14px; padding:12px; margin:10px 0; background:#0b1220}
+ .title{font-weight:700;font-size:16px}
+ .sub{opacity:.8;font-size:13px}
+ .btn{padding:8px 12px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer}
+ .btn.alt{background:#1f2937}
+ .badge-green{display:inline-block;padding:4px 8px;border-radius:9999px;background:#E6F6EE;color:#0F9D58;font-weight:600;font-size:.85rem;margin:2px 4px}
+ .srcs{margin:10px 0}
+ .ctrl{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+ input,button{font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>🏟️ مباريات اليوم</h2>
+
+  <div class="ctrl">
+    <input id="league" placeholder="فلترة الدوري (اختياري)" style="flex:1;padding:8px;border-radius:10px;border:1px solid #223;background:#0b1220;color:#e2e8f0"/>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="liveOnly"/> لايف الآن</label>
+    <button class="btn" onclick="load()">تحديث</button>
+  </div>
+
+  <div id="sources" class="srcs"></div>
+  <div id="list"></div>
+</div>
+
+<script>
+let allMatches = [];
+
+async function load(){
+  const lg = document.getElementById('league').value || "";
+  const url = lg ? `/api/sports/today?league=${encodeURIComponent(lg)}` : `/api/sports/today`;
+  const r = await fetch(url);
+  const data = await r.json();
+  allMatches = data.matches || [];
+
+  const srcDiv = document.getElementById('sources');
+  srcDiv.innerHTML = "المصادر: " + (data.sources||[]).map(s=>`<a class="badge-green" href="${s.url}" target="_blank">${s.name}</a>`).join(" ");
+
+  render();
+}
+
+function render(){
+  const liveOnly = document.getElementById('liveOnly').checked;
+  const list = document.getElementById('list');
+  list.innerHTML = "";
+
+  const items = liveOnly ? allMatches.filter(isLive) : allMatches;
+  if(!items.length){
+    list.innerHTML = `<div class="row">لا توجد مباريات الآن.</div>`;
+    return;
+  }
+
+  for(const m of items){
+    const div = document.createElement('div');
+    div.className = "row";
+    const liveTag = isLive(m) ? " — مباشر الآن" : "";
+    div.innerHTML = `
+      <div class="title">${m.home} × ${m.away}</div>
+      <div class="sub">${m.league||""} • ${m.time||""}${liveTag}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" onclick="playInside('${m.streamUrl||""}')">تشغيل مباشر</button>
+        <a class="badge-green" href="${(m.source&&m.source.url)||'#'}" target="_blank">المصدر</a>
+      </div>
+    `;
+    list.appendChild(div);
+  }
+}
+
+function isLive(m){
+  const t = (m.time||"").toLowerCase();
+  return ["live","مباشر","حي","قيد اللعب","قيد الانتهاء"].some(x=>t.includes(x));
+}
+
+function playInside(url){
+  if(url && url.startsWith("http")){
+    window.location.href = "/ui/sports_player?url=" + encodeURIComponent(url);
+  }else{
+    alert("لا يوجد رابط بث مباشر لهذه المباراة.");
+  }
+}
+
+load();
+document.getElementById('liveOnly').addEventListener('change', render);
+</script>
+</body>
+</html>
