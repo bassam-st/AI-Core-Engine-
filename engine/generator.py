@@ -1,21 +1,20 @@
 # engine/generator.py
 from __future__ import annotations
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 import re
 from urllib.parse import urlparse
 
-# نعتمد على scikit-learn (موجود عندك في requirements)
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
+from scipy.sparse import vstack  # لمنع خطأ قيمة عند مقارنة قوائم مصفوفات
 
 class AnswerSynthesizer:
     """
     مولّد محلي احترافي (بدون LLM):
     - يدمج ويكي + الويب + السياق المحلي.
-    - يجزّئ إلى جمل، ويحسب صلة كل جملة بالسؤال عبر TF-IDF.
-    - يزيل التكرار (MMR بسيط) ويبني جوابًا منظّمًا بأساليب مختلفة.
-    - يضيف قسم "🛠 خطوات عملية" تلقائيًا عند وجود أفعال أمر/تنفيذ.
+    - يجزّئ إلى جمل، ويحسب صلتها بالسؤال عبر TF-IDF.
+    - يزيل التكرار (MMR مبسّط) ويبني جوابًا منظّمًا بأساليب مختلفة.
+    - يضيف قسم "🛠 خطوات عملية" تلقائيًا عند وجود محثّات تنفيذ.
     """
 
     def __init__(self):
@@ -34,29 +33,27 @@ class AnswerSynthesizer:
         return "بكل ود، هذه الإجابة:\n\n" + text
 
     # ---------- أدوات مساعدة ----------
-    _URL_RE = re.compile(r"https?://\S+")
-    _BOX_URL_RE = re.compile(r"\[(https?://[^\]]+)\]")  # نمط [https://...]
-    _WS_RE = re.compile(r"[ \t]+")
-    _NL_RE = re.compile(r"\n{3,}")
+    _URL_RE   = re.compile(r"https?://\S+")
+    _BOX_URL  = re.compile(r"\[(https?://[^\]]+)\]")  # نمط [https://...]
+    _WS_RE    = re.compile(r"[ \t]+")
+    _NL_RE    = re.compile(r"\n{3,}")
     _SPLIT_RE = re.compile(r"(?<=[\.!\؟\?])\s+|\n+")  # تقسيم جمل عربي/إنجليزي مبسّط
 
-    # تبسيط عربي بسيط (بدون حركات)
-    _DIAC_RE = re.compile(r"[\u064B-\u065F\u0670]")  # التشكيل
+    # تبسيط عربي بسيط (إزالة التشكيل وتوحيد الألفات/التاء المربوطة/الياء)
+    _DIAC_RE = re.compile(r"[\u064B-\u065F\u0670]")
     _ALEF_RE = re.compile(r"[إأآا]")
-    _TAH_RE = re.compile(r"ة")
-    _YA_RE = re.compile(r"[يى]")
+    _TAH_RE  = re.compile(r"ة")
+    _YA_RE   = re.compile(r"[يى]")
 
-    # أفعال/محثّات على الخطوات العملية
+    # محثّات تعرض "خطوات عملية"
     _ACTION_TRIGGERS = (
-        "نفّذ", "نفذ", "ثبّت", "ثبت", "ابدأ", "ابدا", "اعمل",
-        "أنشئ", "انشئ", "ابنِ", "ابني", "ابن", "احصل", "خطوات", "طريقة", "كيف"
+        "نفّذ","نفذ","ثبّت","ثبت","ابدأ","ابدا","اعمل",
+        "أنشئ","انشئ","ابنِ","ابني","ابن","احصل","خطوات","طريقة","كيف"
     )
-
-    # مؤشرات الجُمل الإجرائية
     _STEP_HINTS = (
-        "خطوة", "الخطوة", "ابدأ", "قم ب", "نفّذ", "نفذ", "ثبّت", "ثبت",
-        "إنشئ", "أنشئ", "انشئ", "ابنِ", "ابني", "فعّل", "فعل", "أضف", "اضف",
-        "حمّل", "حمل", "شغّل", "شغل", "استخدم", "هيّئ", "هيئ", "اذهب إلى", "افتح", "اختَر", "اختر"
+        "خطوة","الخطوة","ابدأ","قم ب","نفّذ","نفذ","ثبّت","ثبت",
+        "إنشئ","أنشئ","انشئ","ابنِ","ابني","فعّل","فعل","أضف","اضف",
+        "حمّل","حمل","شغّل","شغل","استخدم","هيّئ","هيئ","اذهب إلى","افتح","اختَر","اختر"
     )
 
     def _normalize(self, s: str) -> str:
@@ -82,16 +79,17 @@ class AnswerSynthesizer:
     def _extract_urls_from_snippets(self, web_snippets: List[str]) -> List[str]:
         urls: List[str] = []
         for sn in web_snippets or []:
-            m = self._BOX_URL_RE.search(sn)
+            m = self._BOX_URL.search(sn)
             if m:
                 urls.append(m.group(1))
+        # إزالة التكرار مع الحفاظ على الترتيب
         seen, out = set(), []
         for u in urls:
             if u not in seen:
                 seen.add(u); out.append(u)
         return out
 
-    # ---------- تحويل إلى جمل مرشّحة ----------
+    # ---------- تحويل مصادر إلى جمل ----------
     def _sentences_from_sources(self, wiki: str, web_snippets: List[str], context: str) -> Tuple[List[str], List[str], List[str]]:
         def split_clean(text: str) -> List[str]:
             text = self._clean_text(text)
@@ -99,67 +97,72 @@ class AnswerSynthesizer:
             return [p for p in parts if len(p) >= 20]
 
         wiki_sents = split_clean(wiki) if wiki else []
-        web_sents = []
+        web_sents: List[str] = []
         for sn in web_snippets or []:
             s = sn.lstrip("- ").split("[http", 1)[0].strip()
             web_sents.extend(split_clean(s))
         ctx_sents = split_clean(context) if context else []
         return wiki_sents, web_sents, ctx_sents
 
-    # ---------- ترتيب الجمل حسب الصلة (TF-IDF) + إزالة التكرار ----------
+    # ---------- ترتيب الجمل + إزالة التكرار ----------
     def _rank_and_dedup(self, query: str, candidates: List[str], top_n: int = 12, sim_th: float = 0.8) -> List[str]:
         if not candidates:
             return []
         norm_query = self._normalize(query)
         norm_cands = [self._normalize(c) for c in candidates]
+
         vec = TfidfVectorizer(ngram_range=(1, 2), min_df=1, max_df=0.95)
         X = vec.fit_transform([norm_query] + norm_cands)
         qv, cv = X[0:1], X[1:]
         sims = cosine_similarity(qv, cv).ravel()
         order = sims.argsort()[::-1]
 
-        selected, selected_vecs = [], []
+        selected: List[str] = []
+        selected_mat = None  # مصفوفة متراكمة (sparse) للجمل المختارة
+
         for idx in order:
             sent = candidates[idx]
-            v = cv[idx:idx + 1]
-            if selected_vecs:
-                dup = cosine_similarity(v, selected_vecs).max()
+            v = cv[idx:idx + 1]  # صف واحد (sparse)
+
+            # إزالة التكرار عبر تشابه كوني مع المصفوفة المتراكمة
+            if selected_mat is not None:
+                dup = float(cosine_similarity(v, selected_mat).max())
                 if dup >= sim_th:
                     continue
+
             selected.append(sent)
-            selected_vecs.append(v)
+            selected_mat = v if selected_mat is None else vstack([selected_mat, v])
+
             if len(selected) >= top_n:
                 break
+
         return selected
 
-    # ---------- كشف نية "الخطوات العملية" ----------
+    # ---------- كشف نية عرض الخطوات ----------
     def _wants_steps(self, query: str) -> bool:
         q = self._normalize(query)
         return any(t in q for t in self._ACTION_TRIGGERS)
 
-    # ---------- استخراج جمل إجرائية كخطوات ----------
+    # ---------- استخراج خطوات عملية ----------
     def _extract_steps(self, query: str, web_top: List[str], ctx_top: List[str], wiki_top: List[str], max_steps: int = 6) -> List[str]:
-        # نعطي الأولوية للجمل التي تحتوي على مؤشرات إجرائية
         def is_step_like(s: str) -> bool:
             s_norm = self._normalize(s)
-            return any(h in s_norm for h in self._STEP_HINTS) or s_norm.startswith(("ابدأ", "ابدا", "قم", "افتح", "اختَر", "اختر", "استخدم"))
+            return any(h in s_norm for h in self._STEP_HINTS) or s_norm.startswith(("ابدأ","ابدا","قم","افتح","اختَر","اختر","استخدم"))
 
-        pools = [web_top, ctx_top, wiki_top]  # الأولوية: الويب ثم السياق ثم ويكي
+        pools = [web_top, ctx_top, wiki_top]  # أولوية: الويب ثم المحلي ثم ويكي
         raw: List[str] = []
         for pool in pools:
             for s in pool:
                 if is_step_like(s):
                     raw.append(s)
-        # إن لم نجد جملًا واضحة، نأخذ أول جمل متنوّعة كبدائل خطوات
-        if not raw:
+
+        if not raw:  # بديل في حال عدم وجود جمل إجرائية واضحة
             for pool in pools:
                 raw.extend(pool[:3])
                 if len(raw) >= max_steps:
                     break
 
-        # ترتيب إضافي بالصلَة للسؤال (إعادة ترتيب خفيف)
         ranked = self._rank_and_dedup(query, raw, top_n=max_steps, sim_th=0.85)
-        # تنظيف وتعداد
         steps = []
         for i, s in enumerate(ranked[:max_steps], 1):
             s = s.rstrip(" .،")
@@ -168,9 +171,6 @@ class AnswerSynthesizer:
 
     # ---------- بناء الأقسام ----------
     def _build_sections(self, query: str, wiki_top: List[str], web_top: List[str], ctx_top: List[str], include_steps: bool) -> Tuple[str, List[str], List[str], List[str]]:
-        """
-        يُرجع: (الخلاصة السريعة، أهم النقاط، التحذيرات، الخطوات العملية)
-        """
         # الخلاصة
         summary = ""
         for pool in (wiki_top, web_top, ctx_top):
@@ -180,7 +180,7 @@ class AnswerSynthesizer:
             summary = "لا توجد بيانات كافية لتوليد خلاصة موثوقة للسؤال."
 
         # أهم النقاط
-        bullets = []
+        bullets: List[str] = []
         for src in (wiki_top, web_top, ctx_top):
             for s in src[:4]:
                 bullets.append(s)
@@ -190,13 +190,13 @@ class AnswerSynthesizer:
                 break
 
         # تحذيرات
-        warns = []
+        warns: List[str] = []
         low_evidence = (len(wiki_top) + len(web_top) + len(ctx_top)) < 3
         if low_evidence:
             warns.append("قد تكون بعض التفاصيل غير مكتملة بسبب محدودية السياق المتاح.")
-        if any(k in query for k in ["أفضل", "أحسن", "أقوى", "ultimate", "best"]):
-            warns.append("الاختيار 'الأفضل' قد يختلف باختلاف المتطلبات والقيود العملية.")
-        if any(k in query for k in ["سريع", "بسرعة", "فوري"]):
+        if any(k in query for k in ["أفضل","أحسن","أقوى","ultimate","best"]):
+            warns.append("الاختيار 'الأفضل' يتغير حسب المتطلبات والقيود العملية.")
+        if any(k in query for k in ["سريع","بسرعة","فوري"]):
             warns.append("السرعة قد تؤثر على الدقة والجودة—وازن بين الزمن والدقة.")
 
         # خطوات عملية
@@ -204,19 +204,18 @@ class AnswerSynthesizer:
         if include_steps:
             steps = self._extract_steps(query, web_top, ctx_top, wiki_top, max_steps=6)
             if not steps:
-                # قالب عام في حال ندرة المعلومات
                 steps = [
-                    "1) حدّد الهدف والمتطلبات بدقة (المدخلات/المخرجات/الزمن/الميزانية).",
-                    "2) جهّز البيئة والأدوات اللازمة للتنفيذ، وتحقق من الإصدارات.",
-                    "3) طبّق الخطوة الأساسية الأولى (ابدأ بأبسط نسخة قابلة للعمل).",
-                    "4) اختبر النتائج مبكرًا، وسجّل الملاحظات والأخطاء.",
-                    "5) حسّن الأداء/الدقة تدرّجيًا وأعد الاختبار.",
+                    "1) حدّد الهدف والمتطلبات بدقة (مدخلات/مخرجات/زمن/ميزانية).",
+                    "2) جهّز البيئة والأدوات اللازمة وتحقق من الإصدارات.",
+                    "3) أنشئ نسخة أولية قابلة للعمل (MVP).",
+                    "4) اختبر مبكرًا وسجّل الملاحظات والأخطاء.",
+                    "5) حسّن الأداء/الدقة تدريجيًا وأعد الاختبار.",
                     "6) وثّق ما تمّ وتأكد من قابلية التكرار والنشر."
                 ]
 
         return summary, bullets, warns, steps
 
-    # ---------- الواجهة الرئيسية (مطابقة لـ main.py) ----------
+    # ---------- الواجهة الرئيسية ----------
     def answer(
         self,
         *,
@@ -228,25 +227,24 @@ class AnswerSynthesizer:
         wiki: str,
     ) -> str:
         """
-        توليد محلي احترافي بالكامل:
         1) تحويل (ويكي/الويب/السياق) إلى جمل مرشّحة.
-        2) ترتيب الجمل حسب صلتها بالسؤال عبر TF-IDF.
-        3) إزالة التكرار وبناء الأقسام (خلاصة/نقاط/تحذيرات/خطوات).
-        4) إضافة سطر مصادر نظيفة من الروابط (إن وجدت).
+        2) ترتيب الجمل حسب الصلة عبر TF-IDF + إزالة التكرار.
+        3) بناء الأقسام (خلاصة/نقاط/تحذيرات/خطوات).
+        4) إضافة سطر مصادر (نطاقات الروابط) إن وجدت.
         """
         web_snippets = web_snippets or []
 
-        # مصادر نظيفة
+        # مصادر نظيفة (لإظهار النطاقات فقط)
         urls = self._extract_urls_from_snippets(web_snippets)[:6]
         domains_line = ""
         if urls:
             domains = [self._domain(u) for u in urls]
             domains_line = " — المصادر: " + " | ".join(domains)
 
-        # جمل مرشّحة
+        # تحويل إلى جمل مرشّحة
         wiki_s, web_s, ctx_s = self._sentences_from_sources(wiki, web_snippets, context)
 
-        # ترتيب وإزالة تكرار
+        # ترتيب وإزالة التكرار
         wiki_top = self._rank_and_dedup(query, wiki_s, top_n=4, sim_th=0.82)
         web_top  = self._rank_and_dedup(query, web_s,  top_n=6, sim_th=0.82)
         ctx_top  = self._rank_and_dedup(query, ctx_s,  top_n=6, sim_th=0.82)
@@ -261,13 +259,10 @@ class AnswerSynthesizer:
         parts: List[str] = []
         parts.append(f"❓ السؤال: {query}")
         parts.append("📘 الخلاصة السريعة:\n" + summary)
-
         if bullets:
             parts.append("🔹 أهم النقاط:\n" + "\n".join(f"- {b}" for b in bullets))
-
         if steps:
             parts.append("🛠 خطوات عملية:\n" + "\n".join(steps))
-
         if warns:
             parts.append("⚠️ تنبيهات:\n" + "\n".join(f"- {w}" for w in warns))
 
