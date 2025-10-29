@@ -1,347 +1,163 @@
 <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نواة بسّام الذكية</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>نواة بسّام الذكية</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      min-height:100vh;display:flex;justify-content:center;align-items:center;padding:16px
+    }
+    .chat-container{
+      width:100%;max-width:420px;height:84vh;background:#fff;border-radius:20px;
+      box-shadow:0 10px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden
+    }
+    .chat-header{
+      background:linear-gradient(135deg,#10b981,#0ea5e9);
+      color:#fff;padding:18px 20px;text-align:center;border-radius:20px 20px 0 0
+    }
+    .chat-header h1{font-size:1.35rem;margin-bottom:4px}
+    .chat-header p{font-size:.9rem;opacity:.95}
 
-        .chat-container {
-            width: 90%;
-            max-width: 400px;
-            height: 80vh;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+    .chat-messages{flex:1;padding:16px;overflow-y:auto;background:#f6f7fb}
+    .message{
+      max-width:82%;margin-bottom:12px;padding:12px 14px;border-radius:18px;position:relative;
+      animation:fadeIn .25s ease-in
+    }
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-        .chat-header {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 20px 20px 0 0;
-        }
+    .user-message{
+      background:#10b981;color:#fff;margin-left:auto;border-bottom-right-radius:6px;text-align:left
+    }
+    .bot-message{
+      background:#fff;color:#333;border:1px solid #e6e6ea;margin-right:auto;border-bottom-left-radius:6px;text-align:right
+    }
+    .bot-message b{color:#0ea5e9}
+    .bot-message a{color:#16a34a;text-decoration:underline}
+    .bot-message a:hover{filter:brightness(1.15)}
+    .bot-message hr{border:0;height:1px;background:#ececf2;margin:10px 0}
 
-        .chat-header h1 {
-            font-size: 1.4em;
-            margin-bottom: 5px;
-        }
+    .message-time{font-size:.72rem;opacity:.7;margin-top:6px;text-align:right}
+    .user-message .message-time{text-align:left}
 
-        .chat-header p {
-            font-size: 0.9em;
-            opacity: 0.9;
-        }
+    .typing{display:none;margin-right:auto;background:#fff;color:#666;border:1px solid #eee;
+      border-bottom-left-radius:6px;padding:8px 12px;border-radius:14px}
 
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #f8f9fa;
-        }
-
-        .message {
-            max-width: 80%;
-            margin-bottom: 15px;
-            padding: 12px 16px;
-            border-radius: 18px;
-            position: relative;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .user-message {
-            background: #4CAF50;
-            color: white;
-            margin-left: auto;
-            border-bottom-right-radius: 5px;
-            text-align: left;
-        }
-
-        .bot-message {
-            background: white;
-            color: #333;
-            border: 1px solid #e0e0e0;
-            margin-right: auto;
-            border-bottom-left-radius: 5px;
-            text-align: right;
-        }
-
-        .message-time {
-            font-size: 0.7em;
-            opacity: 0.7;
-            margin-top: 5px;
-            text-align: right;
-        }
-
-        .user-message .message-time {
-            text-align: left;
-        }
-
-        .chat-input-container {
-            padding: 15px;
-            background: white;
-            border-top: 1px solid #e0e0e0;
-            display: flex;
-            gap: 10px;
-        }
-
-        .chat-input {
-            flex: 1;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 25px;
-            outline: none;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .chat-input:focus {
-            border-color: #4CAF50;
-        }
-
-        .send-button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 45px;
-            height: 45px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.3s;
-        }
-
-        .send-button:hover {
-            background: #45a049;
-        }
-
-        .send-button:active {
-            transform: scale(0.95);
-        }
-
-        .typing-indicator {
-            display: none;
-            padding: 10px 15px;
-            background: white;
-            border-radius: 18px;
-            margin-right: auto;
-            border-bottom-left-radius: 5px;
-            max-width: 80px;
-            color: #666;
-            font-style: italic;
-        }
-
-        /* تخصيص شريط التمرير */
-        .chat-messages::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .chat-messages::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-
-        .chat-messages::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 10px;
-        }
-
-        .chat-messages::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
-        }
-
-        /* تصميم متجاوب */
-        @media (max-width: 480px) {
-            .chat-container {
-                width: 95%;
-                height: 90vh;
-                border-radius: 15px;
-            }
-            
-            .message {
-                max-width: 85%;
-            }
-        }
-    </style>
+    .chat-input-wrap{padding:12px;background:#fff;border-top:1px solid #ececf2;display:flex;gap:8px;align-items:center}
+    .chat-input{flex:1;padding:12px 14px;border:1px solid #ddd;border-radius:24px;outline:none;font-size:14px}
+    .chat-input:focus{border-color:#10b981}
+    .send-btn{
+      background:#10b981;color:#fff;border:0;border-radius:50%;width:44px;height:44px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;transition:.2s
+    }
+    .send-btn:hover{transform:scale(1.03)}
+    .select-style{
+      border:1px solid #ddd;border-radius:12px;padding:8px 10px;background:#f9fafb;font-size:.9rem;color:#333
+    }
+    @media (max-width:480px){.chat-container{height:90vh}}
+  </style>
 </head>
 <body>
-    <div class="chat-container">
-        <!-- رأس الشات -->
-        <div class="chat-header">
-            <h1>🧠 نواة بسّام</h1>
-            <p>ذكي • متعلم • سريع الاستجابة</p>
-        </div>
-
-        <!-- منطقة الرسائل -->
-        <div class="chat-messages" id="chatMessages">
-            <!-- رسالة ترحيب من البوت -->
-            <div class="message bot-message">
-                مرحباً! 👋<br>
-                أنا النواة الذكية الجاهزة لمساعدتك في البرمجة، البحث، وتحليل البيانات.
-                <div class="message-time" id="currentTime"></div>
-            </div>
-        </div>
-
-        <!-- مؤشر الكتابة -->
-        <div class="typing-indicator" id="typingIndicator">
-            البوت يكتب...
-        </div>
-
-        <!-- منطقة الإدخال -->
-        <div class="chat-input-container">
-            <input 
-                type="text" 
-                class="chat-input" 
-                id="messageInput" 
-                placeholder="اكتب رسالتك هنا..."
-                maxlength="500"
-            >
-            <button class="send-button" onclick="sendMessage()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="white"/>
-                </svg>
-            </button>
-        </div>
+  <div class="chat-container">
+    <div class="chat-header">
+      <h1>🧠 نواة بسّام</h1>
+      <p>ذكي • متعلم • بحث مباشر من الويب + ويكي</p>
     </div>
 
-    <script>
-        // دالة للحصول على الوقت الحالي
-        function getCurrentTime() {
-            const now = new Date();
-            return now.toLocaleTimeString('ar-EG', { 
-                hour: '2-digit', 
-                minute: '2-digit',
-                hour12: true 
-            });
-        }
+    <div class="chat-messages" id="messages">
+      <div class="message bot-message">
+        مرحبًا! 👋 اسألني أي شيء، سأجمع أفضل النقاط من الويب وويكيبيديا وأرتبها مع مصادر خضراء واضحة.
+        <div class="message-time" id="helloTime"></div>
+      </div>
+    </div>
 
-        // تحديث وقت الرسالة الترحيبية
-        document.getElementById('currentTime').textContent = getCurrentTime();
+    <div class="typing" id="typing">يكتب الآن…</div>
 
-        // دالة إرسال الرسالة
-        async function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            const chatMessages = document.getElementById('chatMessages');
-            const typingIndicator = document.getElementById('typingIndicator');
-            
-            // إضافة رسالة المستخدم
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.className = 'message user-message';
-            userMessageDiv.innerHTML = `
-                ${message}
-                <div class="message-time">${getCurrentTime()}</div>
-            `;
-            chatMessages.appendChild(userMessageDiv);
-            
-            // مسح حقل الإدخال
-            input.value = '';
-            
-            // إظهار مؤشر الكتابة
-            typingIndicator.style.display = 'block';
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            try {
-                // إرسال الرسالة إلى الخادم
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message })
-                });
-                
-                const data = await response.json();
-                
-                // إخفاء مؤشر الكتابة
-                typingIndicator.style.display = 'none';
-                
-                // إضافة رد البوت
-                if (data.ok) {
-                    const botMessageDiv = document.createElement('div');
-                    botMessageDiv.className = 'message bot-message';
-                    botMessageDiv.innerHTML = `
-                        ${data.reply.replace(/\n/g, '<br>')}
-                        <div class="message-time">${getCurrentTime()}</div>
-                    `;
-                    chatMessages.appendChild(botMessageDiv);
-                } else {
-                    const errorMessageDiv = document.createElement('div');
-                    errorMessageDiv.className = 'message bot-message';
-                    errorMessageDiv.innerHTML = `
-                        ❌ حدث خطأ في المعالجة<br>
-                        <small>${data.error || 'حاول مرة أخرى'}</small>
-                        <div class="message-time">${getCurrentTime()}</div>
-                    `;
-                    chatMessages.appendChild(errorMessageDiv);
-                }
-                
-            } catch (error) {
-                // إخفاء مؤشر الكتابة وإظهار خطأ
-                typingIndicator.style.display = 'none';
-                
-                const errorMessageDiv = document.createElement('div');
-                errorMessageDiv.className = 'message bot-message';
-                errorMessageDiv.innerHTML = `
-                    ❌ خطأ في الاتصال بالخادم<br>
-                    <small>تأكد من اتصال الإنترنت</small>
-                    <div class="message-time">${getCurrentTime()}</div>
-                `;
-                chatMessages.appendChild(errorMessageDiv);
-            }
-            
-            // التمرير إلى الأسفل
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+    <div class="chat-input-wrap">
+      <select id="styleSel" class="select-style" title="أسلوب الرد">
+        <option value="">أسلوب افتراضي</option>
+        <option value="friendly">ودود</option>
+        <option value="formal">رسمي</option>
+        <option value="brief">مختصر</option>
+      </select>
+      <input id="inp" class="chat-input" type="text" placeholder="اكتب سؤالك هنا…" maxlength="500"/>
+      <button class="send-btn" id="sendBtn" aria-label="إرسال">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M2 21L23 12L2 3V10L17 12L2 14V21Z" fill="white"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
-        // إرسال بالزر Enter
-        document.getElementById('messageInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const messages = $('messages');
+    const typing = $('typing');
+    const inp = $('inp');
+    const styleSel = $('styleSel');
+
+    function nowTime(){
+      const d = new Date();
+      return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',hour12:true});
+    }
+    $('helloTime').textContent = nowTime();
+
+    function addMsg(html, who='bot'){
+      const div = document.createElement('div');
+      div.className = `message ${who==='user'?'user-message':'bot-message'}`;
+      div.innerHTML = html + `<div class="message-time">${nowTime()}</div>`;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function send(){
+      const q = inp.value.trim();
+      if(!q) return;
+      addMsg(q,'user');
+      inp.value = '';
+      typing.style.display = 'block';
+      messages.scrollTop = messages.scrollHeight;
+
+      try{
+        const res = await fetch('/ask-live', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message: q, style: styleSel.value || null })
         });
+        const data = await res.json();
+        typing.style.display = 'none';
 
-        // التركيز على حقل الإدخال عند التحميل
-        document.getElementById('messageInput').focus();
-
-        // دالة لمسح الشات (يمكن إضافتها لزر في المستقبل)
-        function clearChat() {
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.innerHTML = `
-                <div class="message bot-message">
-                    مرحباً! 👋<br>
-                    أنا النواة الذكية الجاهزة لمساعدتك في البرمجة، البحث، وتحليل البيانات.
-                    <div class="message-time">${getCurrentTime()}</div>
-                </div>
-            `;
+        if(!data.ok){
+          addMsg(`❌ حدث خطأ<br><small>${(data.error||'أعد المحاولة')}</small>`,'bot');
+          return;
         }
-    </script>
+
+        // جواب المولّد (يحوي أقسام وفواصل). نسمح بالروابط الخضراء القادمة من السيرفر.
+        let html = (data.answer || '').replace(/\n/g,'<br>');
+
+        // إن كانت هناك قائمة مصادر، نعرضها أسفل الرد أيضًا.
+        if(Array.isArray(data.sources) && data.sources.length){
+          const items = data.sources.map(s => {
+            const title = s.title || s.link || '';
+            const href = s.link || s.href || '';
+            return `<li><a href="${href}" target="_blank" rel="noopener">${title}</a></li>`;
+          }).join('');
+          html += `<hr><b>المصادر:</b><ul style="padding-right:18px;margin-top:6px">${items}</ul>`;
+        }
+
+        addMsg(html,'bot');
+      }catch(e){
+        typing.style.display = 'none';
+        addMsg(`❌ خطأ في الاتصال بالخادم<br><small>تأكد من الإنترنت ثم حاول ثانية</small>`,'bot');
+      }
+    }
+
+    $('sendBtn').addEventListener('click', send);
+    inp.addEventListener('keydown', (e)=>{ if(e.key==='Enter') send(); });
+    inp.focus();
+  </script>
 </body>
 </html>
