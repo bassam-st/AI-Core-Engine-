@@ -1,80 +1,42 @@
+<!-- templates/sports_player.html -->
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>مشغل المباراة</title>
-  <style>
-    body{margin:0;background:#0b1220;color:#eaf1ff;font-family:system-ui,Segoe UI,Arial}
-    header{padding:12px 16px;background:#101936;border-bottom:1px solid #1b2442}
-    main{padding:12px}
-    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    input,button{padding:10px;border-radius:10px;border:1px solid #223053;background:#0f1730;color:#eaf1ff}
-    button{background:#10b981;border:0;font-weight:700;color:#061416}
-    .hint{font-size:13px;color:#9fb0d6}
-    #player-wrap{max-width:900px;margin:12px auto}
-    video{width:100%;max-height:75vh;background:#000;border-radius:12px}
-  </style>
-  <!-- HLS.js لتشغيل m3u8 على كل المتصفحات -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>المشغل</title>
+<style>
+ body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}
+ .wrap{max-width:920px;margin:auto}
+ video{width:100%;max-height:70vh;background:#000;border-radius:12px}
+ .bar{display:flex;gap:8px;align-items:center;margin:10px 0}
+ input{flex:1;padding:10px;border-radius:10px;border:1px solid #223;background:#0b1220;color:#e2e8f0}
+ button{padding:10px 14px;border:0;border-radius:10px;background:#10b981;color:#041016;font-weight:700}
+</style>
 </head>
 <body>
-  <header>
-    <div class="row">
-      <strong>🎥 مشغل المباراة</strong>
-      <span class="hint">الصق رابط m3u8/MP4/MPD أو افتح من قائمة المباريات.</span>
-    </div>
-  </header>
-
-  <main>
-    <div class="row">
-      <input id="src" type="text" placeholder="ضع رابط البث هنا..." style="flex:1;">
-      <button onclick="play()">تشغيل</button>
-    </div>
-
-    <div id="player-wrap">
-      <video id="v" controls playsinline preload="auto"></video>
-    </div>
-
-    <p class="hint">نصيحة: إن لم يعمل رابط m3u8 على متصفحك، جرّب MP4 أو افتح من جهاز أندرويد (Chrome).</p>
-  </main>
-
-  <script>
-    function getParam(name){
-      const url = new URL(window.location.href);
-      return url.searchParams.get(name);
-    }
-
-    function isHls(u){ return /\.m3u8(\?|$)/i.test(u); }
-    function isDash(u){ return /\.mpd(\?|$)/i.test(u); }
-
-    async function play(){
-      const url = document.getElementById('src').value.trim();
-      if(!url){ alert('ضع رابط البث أولًا'); return; }
-      const video = document.getElementById('v');
-
-      // أوقف أي تشغيل سابق
-      if (window.hls) { try{ window.hls.destroy(); }catch(e){} }
-      video.pause(); video.removeAttribute('src'); video.load();
-
-      if(isHls(url) && window.Hls && Hls.isSupported()){
-        window.hls = new Hls({lowLatencyMode:true});
-        window.hls.loadSource(url);
-        window.hls.attachMedia(video);
-        window.hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-      }else{
-        // للـ MP4 أو متصفحات تدعم HLS أصلاً (Safari/Android)
-        video.src = url;
-        video.play();
-      }
-    }
-
-    // تشغيل تلقائي إذا وصل الرابط من صفحة المباريات
-    const incoming = getParam('url');
-    if(incoming){
-      document.getElementById('src').value = incoming;
-      play();
-    }
-  </script>
+<div class="wrap">
+  <h2>🎥 المشغّل</h2>
+  <div class="bar">
+    <input id="u" placeholder="الصق رابط m3u8 هنا" />
+    <button onclick="play()">تشغيل</button>
+  </div>
+  <video id="v" controls playsinline></video>
+</div>
+<script>
+function getParam(name){
+  return new URLSearchParams(location.search).get(name)||"";
+}
+function play(){
+  const v=document.getElementById('v');
+  const url=document.getElementById('u').value.trim();
+  if(!url){ alert('أدخل رابط'); return; }
+  v.src=url; v.play().catch(()=>{});
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  const url=getParam('url');
+  if(url){ document.getElementById('u').value=url; play(); }
+});
+</script>
 </body>
 </html>
