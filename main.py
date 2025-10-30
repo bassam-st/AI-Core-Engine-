@@ -188,7 +188,7 @@ async def ui_sports_player(request: Request, url: str | None = None):
         {"request": request, "url": url or ""}
     )
 
-# === واجهة قنوات Xtream (بسيطة وتعمل) ===
+# === واجهة قنوات Xtream ===
 @app.get("/ui/xtream", response_class=HTMLResponse)
 def ui_xtream():
     return """
@@ -245,13 +245,13 @@ function render(){
   }
 }
 async function play(id){
-  const r = await fetch('/api/xtream/m3u8/'+id, {redirect:'follow'});
-  const data = await r.json().catch(()=>null);
-  const url = (data && data.url) ? data.url : null;
-  if(!url){ alert('لا يمكن إنشاء رابط البث.'); return; }
+  // ▶️ استخدم البروكسي الآمن عبر الخادم (يتجنب Mixed Content والحجب)
+  const url = '/api/xtream/play/' + id;
   document.getElementById('player').style.display='block';
   document.getElementById('now').innerText='تشغيل: '+id;
-  const v=document.getElementById('v'); v.src=url; v.play().catch(()=>{});
+  const v=document.getElementById('v');
+  v.src = url;
+  v.play().catch(()=>{});
 }
 load();
 </script>
