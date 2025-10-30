@@ -76,3 +76,34 @@ def xtream_m3u8(stream_id: int):
     url = build_live_url(stream_id, "m3u8")
     # نُعيده كـ JSON لتستخدمه واجهة الفيديو
     return {"ok": True, "url": url}
+# أضِف أسفل xtream_proxy.py
+from fastapi.responses import Response, PlainTextResponse
+from urllib.parse import urljoin
+
+def _live_path(stream_id: str, file: str) -> str:
+    return f"/live/{XTREAM_USER}/{XTREAM_PASS}/{stream_id}/{file}"
+
+@router.get("/stream/{stream_id}.m3u8")
+async def proxy_m3u8(stream_id: str):
+    if not (XTREAM_BASE and XTREAM_USER and XTREAM_PASS):
+        raise HTTPException(status_code=500, detail="XTREAM env vars missing")
+    src = urljoin(XTREAM_BASE + "/", _live_path(stream_id, f"{stream_id}.m3u8").lstrip("/"))
+    async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
+        r = await client.get(src)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:200])
+
+    # اجعل روابط المقاطع تمر عبر بروكسي أيضاً
+    text = r.text
+    text = text.replace(f"{stream_id}.ts", f"/api/xtream/seg/{stream_id}/{stream_id}.ts")
+    return Response(content=text, media_type="application/vnd.apple.mpegurl")
+
+@router.get("/seg/{stream_id}/{seg_name}")
+async def proxy_segment(stream_id: str, seg_name: str):
+    src = urljoin(XTREAM_BASE + "/", _live_path(stream_id, seg_name).lstrip("/"))
+    async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
+        r = await client.get(src)
+    if r.status_code >= 400:
+        raise HTTPException(status_code=r.status_code, detail="segment fetch error")
+    # تمرير بايتات TS كما هي
+    return Response(content=r.content, media_type="video/MP2T")
