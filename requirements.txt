@@ -9,7 +9,9 @@ python-docx
 scikit-learn==1.5.2
 joblib==1.4.2
 jinja2
-httpx
+httpx>=0.25
 numpy
 tqdm
 h2
+h2>=4.1.0
+lxml
