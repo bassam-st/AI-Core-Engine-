@@ -12,4 +12,4 @@ jinja2
 httpx
 numpy
 tqdm
-cryptography
+h2
