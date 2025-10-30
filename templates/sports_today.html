@@ -1,168 +1,70 @@
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<!-- templates/sports_today.html -->
+<!doctype html>
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>مباريات اليوم</title>
 <style>
-  :root{--bg:#0f172a;--card:#0b1220;--text:#e2e8f0;--muted:#9fb0d6;--line:#1f2842;--btn:#111827;--ok:#10b981}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text);margin:0;padding:16px}
-  .wrap{max-width:860px;margin:auto}
-  h2{margin:6px 0 14px}
-  .row{border:1px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:var(--card)}
-  .title{font-weight:700;font-size:16px}
-  .sub{opacity:.9;font-size:13px;color:var(--muted)}
-  .ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-  input,button,select{font-family:inherit}
-  input{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0a1329;color:var(--text)}
-  .btn{padding:9px 12px;border:0;border-radius:10px;background:var(--btn);color:#fff;cursor:pointer}
-  .btn.play{background:var(--ok);color:#062116;font-weight:700}
-  .badge{display:inline-block;padding:4px 8px;border-radius:9999px;background:#E6F6EE;color:#0F9D58;font-weight:600;font-size:.85rem;margin:2px 4px;text-decoration:none}
-  .pill{display:inline-block;padding:2px 8px;border-radius:9999px;background:#15213d;border:1px solid var(--line);font-size:12px;margin-inline-start:6px}
-  .live{color:#ff7676;font-weight:700}
-  .hr{height:1px;background:var(--line);margin:10px 0}
-  .muted{color:var(--muted);font-size:12px}
-  .flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}
+ .wrap{max-width:900px;margin:auto}
+ .row{border:1px solid #223;border-radius:14px;padding:12px;margin:10px 0;background:#0b1220}
+ .title{font-weight:700;font-size:16px}
+ .sub{opacity:.85;font-size:13px}
+ .btn{padding:8px 12px;border:0;border-radius:10px;background:#10b981;color:#041016;font-weight:700}
+ .badge{display:inline-block;padding:4px 8px;border-radius:9999px;background:#1f2937;color:#e2e8f0;margin:2px}
+ input,button{font-family:inherit}
+ .ctrl{display:flex;gap:8px;align-items:center;margin-bottom:10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h2>🏟️ مباريات اليوم</h2>
-
   <div class="ctrl">
-    <input id="league" placeholder="فلترة الدوري (اختياري)"/>
-    <input id="q" placeholder="بحث بالفرق (اختياري)"/>
-    <label class="flex" style="gap:6px"><input type="checkbox" id="liveOnly"/> لايف الآن</label>
-    <label class="flex" style="gap:6px"><input type="checkbox" id="auto" checked/> تحديث تلقائي</label>
+    <input id="league" placeholder="فلترة الدوري (اختياري)" style="flex:1;padding:8px;border-radius:10px;border:1px solid #223;background:#0b1220;color:#e2e8f0"/>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="liveOnly"/> لايف الآن</label>
     <button class="btn" onclick="load()">تحديث</button>
   </div>
-
-  <div id="sources" class="flex" style="margin:8px 0;"></div>
-  <div class="hr"></div>
+  <div id="sources"></div>
   <div id="list"></div>
-  <p class="muted">اضغط “تشغيل مباشر” لفتح المشغل داخل التطبيق. إن كان لديك اشتراك Xtream وتم تمرير <code>xtreamStreamId</code> للمباراة، استخدم زر “تشغيل عبر Xtream”.</p>
 </div>
-
 <script>
-let allMatches = [];
-let autoIv = null;
-
-function badge(name,url){ return `<a class="badge" href="${url}" target="_blank" rel="noopener">${name}</a>`; }
-
+let allMatches=[];
 async function load(){
-  try{
-    const lg = document.getElementById('league').value || "";
-    const url = lg ? `/api/sports/today?league=${encodeURIComponent(lg)}` : `/api/sports/today`;
-    const r = await fetch(url);
-    const data = await r.json();
-
-    allMatches = Array.isArray(data.matches) ? data.matches : [];
-
-    const srcDiv = document.getElementById('sources');
-    srcDiv.innerHTML = (data.sources||[])
-      .map(s=>badge(s.name || s.title || 'مصدر', s.url || s.link || '#'))
-      .join("");
-
-    render();
-    setupAuto();
-  }catch(e){
-    alert('تعذّر تحميل المباريات');
-    console.error(e);
-  }
+  const lg=document.getElementById('league').value||"";
+  const url = lg ? `/api/sports/today?league=${encodeURIComponent(lg)}` : `/api/sports/today`;
+  const r=await fetch(url);
+  const data=await r.json();
+  allMatches = data.matches||[];
+  const srcDiv=document.getElementById('sources');
+  srcDiv.innerHTML = "المصادر: " + (data.sources||[]).map(s=>`<a class="badge" href="${s.url}" target="_blank">${s.name}</a>`).join(" ");
+  render();
 }
-
-function setupAuto(){
-  const auto = document.getElementById('auto').checked;
-  if(auto && !autoIv){
-    autoIv = setInterval(load, 60000); // كل 60 ثانية
-  }else if(!auto && autoIv){
-    clearInterval(autoIv); autoIv = null;
-  }
-}
-
-function isLive(m){
-  const t = (m.time||"").toLowerCase();
-  return ["live","مباشر","حي","قيد اللعب","قيد الانتهاء","now","ongoing"].some(x=>t.includes(x));
-}
-
-function pass(v){ return v!==undefined && v!==null && v!==""; }
-
 function render(){
-  const list = document.getElementById('list');
-  list.innerHTML = "";
-  const liveOnly = document.getElementById('liveOnly').checked;
-  const q = (document.getElementById('q').value || "").trim().toLowerCase();
-
-  let items = allMatches.slice();
-  if(liveOnly) items = items.filter(isLive);
-  if(q) items = items.filter(m => ((m.home||"")+ (m.away||"")+ (m.league||"")).toLowerCase().includes(q));
-
-  if(!items.length){
-    list.innerHTML = `<div class="row">لا توجد مباريات مطابقة الآن.</div>`;
-    return;
-  }
-
+  const liveOnly=document.getElementById('liveOnly').checked;
+  const list=document.getElementById('list'); list.innerHTML="";
+  const items = liveOnly ? allMatches.filter(isLive) : allMatches;
+  if(!items.length){ list.innerHTML=`<div class="row">لا توجد مباريات الآن.</div>`; return; }
   for(const m of items){
-    const div = document.createElement('div');
-    div.className = "row";
-
-    const liveTag = isLive(m) ? `<span class="live pill">مباشر الآن</span>` : "";
-    const league = pass(m.league) ? `<span class="pill">${m.league}</span>` : "";
-    const time   = pass(m.time)   ? `<span class="pill">${m.time}</span>`   : "";
-
-    const srcBtn = (m.source && (m.source.url||m.source.link))
-      ? `<a class="badge" href="${m.source.url || m.source.link}" target="_blank" rel="noopener">المصدر</a>` : "";
-
-    // أزرار التشغيل
-    let playBtns = "";
-    if (pass(m.streamUrl)) {
-      playBtns += `<button class="btn play" onclick="playDirect('${encodeURIComponent(m.streamUrl)}')">تشغيل مباشر</button>`;
-    }
-    if (pass(m.xtreamStreamId)) {
-      playBtns += `<button class="btn" onclick="playViaXtream('${m.xtreamStreamId}')">تشغيل عبر Xtream</button>`;
-    }
-
+    const div=document.createElement('div'); div.className="row";
+    const liveTag = isLive(m) ? " — مباشر الآن" : "";
     div.innerHTML = `
-      <div class="title">${m.home || "?"} × ${m.away || "?"}</div>
-      <div class="sub" style="margin:6px 0">${league} ${time} ${liveTag}</div>
-      <div class="flex" style="margin-top:6px">
-        ${playBtns || '<span class="muted">لا يوجد رابط بث متاح حالياً.</span>'}
-        ${srcBtn}
+      <div class="title">${m.home} × ${m.away}</div>
+      <div class="sub">${m.league||""} • ${m.time||""}${liveTag}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <a class="btn" href="/ui/sports_player?url=${encodeURIComponent('/api/xtream/play/22')}">تشغيل مثال</a>
+        <a class="badge" href="${(m.source&&m.source.url)||'#'}" target="_blank">المصدر</a>
       </div>
     `;
     list.appendChild(div);
   }
 }
-
-function playDirect(encodedUrl){
-  const url = decodeURIComponent(encodedUrl);
-  if(url && url.startsWith('http')){
-    window.location.href = "/ui/sports_player?url=" + encodeURIComponent(url);
-  }else{
-    alert("الرابط غير صالح.");
-  }
+function isLive(m){
+  const t=(m.time||"").toLowerCase();
+  return ["live","مباشر","حي","قيد اللعب","قيد الانتهاء"].some(x=>t.includes(x));
 }
-
-async function playViaXtream(streamId){
-  try{
-    const r = await fetch(`/api/xtream/build?stream_id=${encodeURIComponent(streamId)}`);
-    const data = await r.json();
-    if(!data.ok || !data.url){
-      alert(data.error || "تعذر توليد رابط Xtream");
-      return;
-    }
-    window.location.href = "/ui/sports_player?url=" + encodeURIComponent(data.url);
-  }catch(e){
-    alert("تعذر الاتصال بخادم Xtream"); console.error(e);
-  }
-}
-
-document.getElementById('liveOnly').addEventListener('change', render);
-document.getElementById('q').addEventListener('input', render);
-document.getElementById('auto').addEventListener('change', setupAuto);
-
-// التحميل الأولي
 load();
+document.getElementById('liveOnly').addEventListener('change', render);
 </script>
 </body>
 </html>
