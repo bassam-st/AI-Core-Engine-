@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>قنوات Xtream</title>
+<style>
+ body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}
+ .wrap{max-width:920px;margin:auto}
+ .row{display:flex;align-items:center;gap:12px;border:1px solid #223;border-radius:14px;padding:10px;margin:8px 0;background:#0b1220}
+ .logo{width:44px;height:44px;border-radius:10px;background:#111;object-fit:contain}
+ .name{font-weight:700}
+ .muted{opacity:.8;font-size:13px}
+ input,select,button{font-family:inherit}
+ .ctrl{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+ input,select{flex:1;padding:10px;border-radius:10px;border:1px solid #223;background:#0b1220;color:#e2e8f0}
+ button{padding:10px 14px;border:0;border-radius:10px;background:#10b981;color:#041016;font-weight:700}
+ a.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#1f2937;color:#e5e7eb;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>📺 قنوات Xtream</h2>
+  <div class="ctrl">
+    <input id="q" placeholder="ابحث عن قناة (مثال: beIN, SSC, MBC ...)">
+    <select id="cat"><option value="">كل التصنيفات</option></select>
+    <button onclick="load()">تحديث</button>
+  </div>
+  <div class="muted" id="meta"></div>
+  <div id="list"></div>
+</div>
+
+<script>
+let all = [];
+
+async function load(){
+  const qVal = document.getElementById('q').value.trim();
+  const url = qVal ? `/api/xtream/channels?q=${encodeURIComponent(qVal)}` : `/api/xtream/channels`;
+  const r = await fetch(url);
+  if(!r.ok){ document.getElementById('list').innerHTML = 'فشل في جلب القنوات.'; return; }
+  const data = await r.json();
+  all = data.channels || [];
+
+  // اصنع قائمة التصنيفات
+  const cats = [...new Set(all.map(ch => ch.category || '').filter(Boolean))].sort();
+  const catSel = document.getElementById('cat');
+  catSel.innerHTML = '<option value="">كل التصنيفات</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  catSel.onchange = render;
+
+  document.getElementById('meta').textContent = `المجموع: ${data.count}`;
+  render();
+}
+
+function render(){
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+
+  const cat = document.getElementById('cat').value;
+  const q = document.getElementById('q').value.trim().toLowerCase();
+
+  let rows = [...all];
+  if(cat) rows = rows.filter(r => (r.category||'') === cat);
+  if(q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.category||'').toLowerCase().includes(q));
+
+  if(!rows.length){
+    list.innerHTML = `<div class="row">لا توجد نتائج.</div>`;
+    return;
+  }
+
+  for(const ch of rows.slice(0, 500)){ // حماية من القوائم الضخمة
+    const div = document.createElement('div');
+    div.className = 'row';
+    const logo = ch.logo && ch.logo.startsWith('http') ? ch.logo : '';
+    div.innerHTML = `
+      <img class="logo" src="${logo||''}" onerror="this.style.display='none'"/>
+      <div style="flex:1">
+        <div class="name">${ch.name}</div>
+        <div class="muted">${ch.category||''}</div>
+      </div>
+      <a class="badge" href="/ui/sports_player?url=${encodeURIComponent(ch.live_url)}">تشغيل</a>
+      <a class="badge" href="/api/xtream/open/${encodeURIComponent(ch.id)}" target="_blank">فتح خارجي</a>
+    `;
+    list.appendChild(div);
+  }
+}
+
+load();
+</script>
+</body>
+</html>
