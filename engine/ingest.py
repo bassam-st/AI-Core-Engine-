@@ -36,7 +36,16 @@ def _read_file_content(path: Path) -> str:
             return f"[Unsupported file type: {path.suffix}]"
     except Exception as e:
         return f"[Error reading file {path.name}: {e}]"
+# engine/ingest.py
 
+class Ingestor:
+    """Dummy Ingestor fallback"""
+    def __init__(self):
+        pass
+
+    def ingest(self, *args, **kwargs):
+        print("⚙️ Ingestor placeholder called")
+        return {"ok": True, "msg": "ingest not implemented yet"}
 
 def ingest_file(upload_path: str) -> Dict[str, Any]:
     """
