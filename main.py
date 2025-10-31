@@ -1,38 +1,57 @@
-# -*- coding: utf-8 -*-
+# main.py — نسخة نهائية متكاملة لتطبيق Bassam AI + Xtream
 from __future__ import annotations
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-# راوتر Xtream (في engine/xtream_proxy.py)
+# راوتر Xtream
 from engine.xtream_proxy import router as xtream_router
 
-app = FastAPI(title="النواة الذكية – Bassam")
+# ---------------- إعداد التطبيق ----------------
+app = FastAPI(title="النواة الذكية الاحترافية – Bassam")
 
-# CORS
+# تمكين CORS للسماح بطلبات الواجهة
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],      # يسمح لكل النطاقات
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- صفحات HTML (استخدم اقتباس مفرد ثلاثي وأغلقه جيدًا) ---
-HTML_HOME = r'''
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>النواة الذكية – Bassam</title></head>
-<body style="font-family:Arial;direction:rtl;text-align:center;margin-top:40px;background:#0f172a;color:#e2e8f0">
-  <h2>🧠 النواة الذكية الاحترافية</h2>
-  <p>مرحبًا بك في نواة بسّام — اختر ما تريد:</p>
-  <p>
-    <a href="/ui/xtream" style="color:#93c5fd;text-decoration:none;font-size:18px">📺 شاشة Xtream</a> |
-    <a href="/docs" style="color:#93c5fd;text-decoration:none;font-size:18px">🧩 Swagger API</a>
-  </p>
-</body></html>
-'''
+# ---------------- الصفحة الرئيسية ----------------
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+    <html><head><meta charset='utf-8'><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>النواة الذكية – Bassam</title></head>
+    <body style='font-family:Arial;direction:rtl;text-align:center;margin-top:40px;background:#0f172a;color:#e2e8f0'>
+      <h2>🧠 النواة الذكية الاحترافية</h2>
+      <p>مرحبًا بك في نواة بسّام — اختر ما تريد:</p>
+      <p>
+        <a href='/ui/xtream' style='color:#93c5fd;text-decoration:none;font-size:18px'>📺 شاشة Xtream</a> |
+        <a href='/docs' style='color:#93c5fd;text-decoration:none;font-size:18px'>🧩 Swagger API</a>
+      </p>
+    </body></html>
+    """
 
-HTML_XTREAM = r'''<!doctype html><html lang="ar" dir="rtl"><head>
+# ---------------- واجهة Xtream ----------------
+@app.get("/ui/xtream", response_class=HTMLResponse)
+def ui_xtream():
+    return HTML_XTREAM  # متغيّر HTML أدناه
+
+# ---------------- تضمين راوتر Xtream ----------------
+app.include_router(xtream_router)
+
+# ---------------- صفحة اختبار السيرفر ----------------
+@app.get("/ping")
+def ping():
+    return {"ok": True, "app": "Bassam AI Core Engine", "xtream": True}
+
+# ---------------- واجهة HTML المضمَّنة ----------------
+HTML_XTREAM = r"""
+<!doctype html><html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>قنوات Xtream – Bassam AI</title>
 <style>
@@ -81,19 +100,4 @@ function canHLS(){const v=document.createElement('video');return v.canPlayType('
 async function play(id){$("now").textContent="تشغيل: #"+id;const m3u8=`/api/xtream/stream/${id}.m3u8?host=${encodeURIComponent(state.host)}&u=${encodeURIComponent(state.u)}&p=${encodeURIComponent(state.p)}`;const ts=`/api/xtream/stream/${id}.ts?host=${encodeURIComponent(state.host)}&u=${encodeURIComponent(state.u)}&p=${encodeURIComponent(state.p)}`;const video=$("player");if(canHLS()){video.src=m3u8;video.play().catch(()=>{});}else{if(!window.Hls){await new Promise((ok,er)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/hls.js@latest';s.onload=ok;s.onerror=er;document.head.appendChild(s);});}if(window.Hls&&window.Hls.isSupported()){const hls=new Hls();hls.loadSource(m3u8);hls.attachMedia(video);hls.on(Hls.Events.MANIFEST_PARSED,()=>video.play().catch(()=>{}));}else{video.src=ts;video.play().catch(()=>{});}}}
 loadCats();
 </script></body></html>
-'''
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return HTML_HOME
-
-@app.get("/ui/xtream", response_class=HTMLResponse)
-def ui_xtream():
-    return HTML_XTREAM
-
-# ضمّ راوتر Xtream
-app.include_router(xtream_router)
-
-@app.get("/ping")
-def ping():
-    return {"ok": True}
+"""
