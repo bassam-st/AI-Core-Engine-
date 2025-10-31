@@ -1,123 +1,94 @@
-# engine/xtream_proxy.py — Final
+# engine/xtream_proxy.py
 from __future__ import annotations
-import os
-from typing import Any, Dict, List
-from urllib.parse import urljoin
-
+import os, json, urllib.parse
+from typing import Optional, Any, Dict, List
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import JSONResponse, RedirectResponse
 import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse, Response
 
 router = APIRouter(prefix="/api/xtream", tags=["xtream"])
 
-# بيئة
-XTREAM_BASE = os.getenv("XTREAM_BASE", "").rstrip("/")
-XTREAM_USER = os.getenv("XTREAM_USER", "")
-XTREAM_PASS = os.getenv("XTREAM_PASS", "")
-TIMEOUT = 20
+BASE_PROXY = os.getenv("BASE_PROXY", "").strip() or "https://YOUR-WORKER.workers.dev"
+XTREAM_HOST = os.getenv("XTREAM_HOST", "").strip()     # مثال: mhiptv.info:2095
+XTREAM_U    = os.getenv("XTREAM_U", "").strip()
+XTREAM_P    = os.getenv("XTREAM_P", "").strip()
 
-UA = "Mozilla/5.0 (Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Mobile Safari"
-HEADERS = {
-    "User-Agent": UA,
-    "Accept": "application/json, text/plain, */*",
-}
+def _qs(params: Dict[str, Any]) -> str:
+    return urllib.parse.urlencode(params, doseq=True, safe=":/")
 
-def _assert_env():
-    if not (XTREAM_BASE and XTREAM_USER and XTREAM_PASS):
-        raise HTTPException(500, detail="XTREAM env vars missing (XTREAM_BASE/USER/PASS)")
+def _xt_url(**extra) -> str:
+    params = dict(
+        host=extra.pop("host", XTREAM_HOST),
+        u=extra.pop("u", XTREAM_U),
+        p=extra.pop("p", XTREAM_P),
+        endpoint=extra.pop("endpoint", "player_api.php"),
+    )
+    params.update(extra)
+    return f"{BASE_PROXY}/xtream?{_qs(params)}"
 
-def _client() -> httpx.Client:
-    # http2=False لتفادي مشاكل h2 على بعض البنى
-    return httpx.Client(headers=HEADERS, timeout=TIMEOUT, http2=False, follow_redirects=True)
-
-def build_live_url(stream_id: int | str, ext: str = "m3u8") -> str:
-    _assert_env()
-    path = f"/live/{XTREAM_USER}/{XTREAM_PASS}/{stream_id}.{ext}"
-    return urljoin(XTREAM_BASE + "/", path.lstrip("/"))
-
-def _player_api(params: Dict[str, Any]) -> Dict[str, Any] | List[Dict[str, Any]]:
-    _assert_env()
-    url = f"{XTREAM_BASE}/player_api.php"
-    q = {"username": XTREAM_USER, "password": XTREAM_PASS, **params}
-    with _client() as c:
-        r = c.get(url, params=q)
-        if r.status_code == 403:
-            raise HTTPException(403, detail="403 from upstream (Xtream). افتح BASE من المتصفح للتحقق.")
-        r.raise_for_status()
+async def _get_json(url: str) -> Any:
+    async with httpx.AsyncClient(timeout=30) as cli:
+        r = await cli.get(url)
+        if r.status_code >= 400:
+            raise HTTPException(r.status_code, f"Upstream error {r.status_code}")
         try:
             return r.json()
         except Exception:
-            return {"raw": r.text}
+            # بعض البانيلات ترجع نص JSON غير قياسي
+            return json.loads(r.text)
 
-@router.get("/info")
-def xtream_info():
-    data = _player_api({})
-    return JSONResponse({"ok": True, "info": data})
+def _cfg_ok() -> bool:
+    return all([BASE_PROXY, XTREAM_HOST, XTREAM_U, XTREAM_P])
+
+@router.get("/ping")
+async def ping() -> JSONResponse:
+    return JSONResponse({
+        "ok": _cfg_ok(),
+        "base_proxy": BASE_PROXY,
+        "host": XTREAM_HOST,
+        "u_mask": XTREAM_U[:2] + "***" if XTREAM_U else "",
+        "p_mask": XTREAM_P[:1] + "***" if XTREAM_P else "",
+    })
+
+@router.get("/categories")
+async def categories(
+    host: Optional[str] = None, u: Optional[str] = None, p: Optional[str] = None
+):
+    url = _xt_url(host=host or XTREAM_HOST, u=u or XTREAM_U, p=p or XTREAM_P,
+                  action="get_live_categories")
+    return await _get_json(url)
 
 @router.get("/channels")
-def xtream_channels():
-    # نحاول جلب كل القنوات الحية
-    data = _player_api({"action": "get_live_streams"})
-    raw = []
-    if isinstance(data, list):
-        raw = data
-    else:
-        raw = data.get("available_channels") or data.get("streams") or []
-    channels: List[Dict[str, Any]] = []
-    for ch in raw:
-        channels.append({
-            "stream_id": ch.get("stream_id"),
-            "name": ch.get("name"),
-            "category": ch.get("category_name") or ch.get("category_id"),
-            "logo": ch.get("stream_icon"),
-        })
-    return {"ok": True, "count": len(channels), "channels": channels}
-
-@router.get("/m3u8/{stream_id}")
-def xtream_m3u8(stream_id: int):
-    # يُعيد رابط m3u8 المباشر (بدون تمرير عبر الخادم)
-    url = build_live_url(stream_id, "m3u8")
-    return {"ok": True, "url": url}
-
-# ====== بروكسي m3u8 + المقاطع (لتجاوز Mixed Content) ======
-
-def _live_path(stream_id: str, file: str) -> str:
-    # بعض السيرفرات تستخدم مجلد باسم stream_id للمقاطع
-    # إن لم يكن كذلك فسنحاول المسار الرئيسي
-    return f"/live/{XTREAM_USER}/{XTREAM_PASS}/{stream_id}/{file}"
+async def channels(
+    category_id: Optional[str] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    host: Optional[str] = None, u: Optional[str] = None, p: Optional[str] = None
+):
+    url = _xt_url(host=host or XTREAM_HOST, u=u or XTREAM_U, p=p or XTREAM_P,
+                  action="get_live_streams", category_id=category_id or "")
+    data = await _get_json(url)
+    items: List[Dict[str, Any]] = data if isinstance(data, list) else []
+    if q:
+        ql = q.lower().strip()
+        items = [s for s in items if (s.get("name") or "").lower().find(ql) >= 0]
+    # تبسيط الحقول
+    out = [{
+        "stream_id": s.get("stream_id"),
+        "name": s.get("name"),
+        "category": s.get("category_name") or s.get("category_id"),
+    } for s in items]
+    return {"ok": True, "count": len(out), "channels": out}
 
 @router.get("/stream/{stream_id}.m3u8")
-async def proxy_m3u8(stream_id: str):
-    _assert_env()
-    # نحاول أولًا manifest داخل مجلد stream_id
-    src1 = urljoin(XTREAM_BASE + "/", _live_path(stream_id, f"{stream_id}.m3u8").lstrip("/"))
-    # بديل: مباشرة بدون مجلد
-    src2 = build_live_url(stream_id, "m3u8")
-    async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
-        r = await client.get(src1)
-        if r.status_code >= 400 or "#EXTM3U" not in r.text:
-            r = await client.get(src2)
-            if r.status_code >= 400:
-                raise HTTPException(status_code=r.status_code, detail=r.text[:200])
-
-    # إعادة كتابة روابط المقاطع لتسير عبر بروكسي أيضًا
-    text = r.text
-    # استبدال أي اسم .ts ليذهب لمسار /seg/
-    text = text.replace(f"{stream_id}.ts", f"/api/xtream/seg/{stream_id}/{stream_id}.ts")
-    return Response(content=text, media_type="application/vnd.apple.mpegurl")
-
-@router.get("/seg/{stream_id}/{seg_name}")
-async def proxy_segment(stream_id: str, seg_name: str):
-    _assert_env()
-    # نجرب المسار داخل المجلد:
-    src = urljoin(XTREAM_BASE + "/", _live_path(stream_id, seg_name).lstrip("/"))
-    async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
-        r = await client.get(src)
-    if r.status_code >= 400 or not r.content:
-        # بديل: مباشرة بدون مجلد
-        alt = urljoin(XTREAM_BASE + "/", f"live/{XTREAM_USER}/{XTREAM_PASS}/{seg_name}")
-        async with httpx.AsyncClient(headers=HEADERS, timeout=TIMEOUT, follow_redirects=True) as client:
-            r = await client.get(alt)
-        if r.status_code >= 400:
-            raise HTTPException(status_code=r.status_code, detail="segment fetch error")
-    return Response(content=r.content, media_type="video/MP2T")
+async def stream_hls(stream_id: str,
+                     host: Optional[str] = None, u: Optional[str] = None, p: Optional[str] = None):
+    # نعيد توجيه للـ Worker xplay مع النوع m3u8 ليتشغل داخل <video>
+    qp = _qs({
+        "host": host or XTREAM_HOST,
+        "u": u or XTREAM_U,
+        "p": p or XTREAM_P,
+        "stream": stream_id,
+        "type": "m3u8",
+    })
+    url = f"{BASE_PROXY}/xplay?{qp}"
+    return RedirectResponse(url, status_code=302)
