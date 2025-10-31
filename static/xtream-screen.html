@@ -33,7 +33,7 @@
 </header>
 
 <main>
-  <!-- العمود الأيسر: الإعدادات والتصنيفات -->
+  <!-- الإعدادات -->
   <section class="panel">
     <h3>إعدادات Xtream</h3>
     <div class="row" style="margin-top:8px">
@@ -47,12 +47,11 @@
     <p class="muted">يمكنك أيضا فتح الصفحة هكذا:<br>
       <code>?host=HOST:PORT&u=USER&p=PASS</code>
     </p>
-
     <h3 style="margin-top:10px">التصنيفات</h3>
     <div id="cats" class="chips"></div>
   </section>
 
-  <!-- العمود الأيمن: الفيديو + قائمة القنوات -->
+  <!-- الفيديو + القنوات -->
   <section class="panel">
     <div class="row" style="justify-content:space-between">
       <h3>المشغل</h3>
@@ -77,28 +76,26 @@
 </main>
 
 <script>
-// 1) عدّل هذا لو تغيّر رابط الWorker عندك:
 const BASE_PROXY = "https://ai-core-proxy.bassam-7111111.workers.dev";
 
-// 2) قراءة الإعدادات
 const url = new URL(location.href);
 const state = {
   host: url.searchParams.get("host") || localStorage.getItem("xt_host") || "",
-  u:    url.searchParams.get("u")    || localStorage.getItem("xt_u")    || "",
-  p:    url.searchParams.get("p")    || localStorage.getItem("xt_p")    || "",
+  u: url.searchParams.get("u") || localStorage.getItem("xt_u") || "",
+  p: url.searchParams.get("p") || localStorage.getItem("xt_p") || "",
   catId: null,
   allStreams: [],
 };
 
-const $ = (id)=>document.getElementById(id);
+const $ = id => document.getElementById(id);
 $("host").value = state.host;
 $("user").value = state.u;
 $("pass").value = state.p;
 
 $("save").onclick = () => {
   state.host = $("host").value.trim();
-  state.u    = $("user").value.trim();
-  state.p    = $("pass").value.trim();
+  state.u = $("user").value.trim();
+  state.p = $("pass").value.trim();
   localStorage.setItem("xt_host", state.host);
   localStorage.setItem("xt_u", state.u);
   localStorage.setItem("xt_p", state.p);
@@ -109,7 +106,6 @@ function setStatus(msg){ $("status").textContent = msg; }
 function qp(obj){ return Object.entries(obj).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&"); }
 function needCreds(){ return !(state.host && state.u && state.p); }
 
-// 3) جلب التصنيفات من الWorker
 async function loadCategories(){
   if (needCreds()){ setStatus("أدخل بيانات Xtream ثم اضغط حفظ"); $("cats").innerHTML=""; $("streams").innerHTML=""; return; }
   setStatus("جلب التصنيفات…");
@@ -133,7 +129,6 @@ async function loadCategories(){
   }
 }
 
-// 4) القنوات داخل التصنيف
 async function selectCategory(category_id, btn){
   [...document.querySelectorAll(".chip")].forEach(x=>x.classList.remove("active"));
   btn.classList.add("active");
@@ -153,7 +148,6 @@ async function selectCategory(category_id, btn){
   }
 }
 
-// 5) عرض القنوات + البحث + الفرز
 $("q").oninput = renderStreams;
 $("sort").onchange = renderStreams;
 
@@ -163,7 +157,6 @@ function renderStreams(){
   let items = state.allStreams.slice();
   if (q) items = items.filter(s => (s.name||"").toLowerCase().includes(q));
   items.sort((a,b)=> sort==="id" ? (+a.stream_id||0)-(+b.stream_id||0) : (a.name||"").localeCompare(b.name||""));
-
   $("streams").innerHTML = "";
   items.forEach(s=>{
     const div = document.createElement("div");
@@ -182,14 +175,13 @@ function renderStreams(){
   });
 }
 
-// 6) التشغيل عبر خادمك: /xplay
+// ✅ التشغيل عبر خادمك
 function playStream(stream_id){
-  const url = `/xplay?${qp({host: state.host, u: state.u, p: state.p, stream: stream_id, type: "m3u8"})}`;
+  const url = `${BASE_PROXY}/x?url=http://${state.host}/live/${state.u}/${state.p}/${stream_id}.m3u8`;
   startVideo(url);
   setStatus(`تشغيل: #${stream_id}`);
 }
 
-// دعم HLS
 function canNativeHLS(){
   const v = document.createElement("video");
   return v.canPlayType('application/vnd.apple.mpegURL') || v.canPlayType('application/x-mpegURL');
@@ -198,7 +190,6 @@ function canNativeHLS(){
 async function startVideo(hlsUrl){
   const video = document.getElementById("player");
   const srcEl  = document.getElementById("videoSrc");
-
   if (canNativeHLS()){
     srcEl.src = hlsUrl;
     video.load();
@@ -224,7 +215,6 @@ async function startVideo(hlsUrl){
   }
 }
 
-// تحميل تلقائي
 loadCategories();
 </script>
 </body>
