@@ -3,41 +3,56 @@ import fetch from "node-fetch";
 
 const app = express();
 
-app.get("/x", async (req, res) => {
-  const target = req.query.url;
-  if (!target) return res.status(400).send("Missing url");
-
-  const range = req.headers.range;
-
-  const hdrs = {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-    "Origin": "http://127.0.0.1",
-    "Referer": "http://127.0.0.1/",
-    "Connection": "keep-alive",
-  };
-  if (range) hdrs["Range"] = range;
-
-  const upstream = await fetch(target, { headers: hdrs });
-  res.status(upstream.status);
-  upstream.headers.forEach((v, k) => res.setHeader(k, v));
-
-  // ثبّت نوع المحتوى إذا لم يكن محدد
-  const ct = upstream.headers.get("content-type") || "";
-  if (!ct && target.endsWith(".m3u8")) {
-    res.setHeader("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8");
-  }
-
-  // CORS
+// إعداد CORS
+app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
-
-  upstream.body.pipe(res);
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
 });
 
-app.get("/", (_req, res) => res.send("Proxy OK ✅"));
+// ✅ جلب تصنيفات Xtream / القنوات / التفاصيل
+app.get("/xtream", async (req, res) => {
+  try {
+    const { host, endpoint = "player_api.php", ...params } = req.query;
+    if (!host) return res.status(400).send("Missing host");
+
+    const url = new URL(`http://${host}/${endpoint}`);
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const text = await r.text();
+
+    res.set("content-type", "application/json; charset=utf-8");
+    return res.send(text);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Proxy error");
+  }
+});
+
+// ✅ تشغيل روابط m3u8 للقنوات
+app.get("/x", async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).send("Missing url");
+
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    res.set("content-type", "application/vnd.apple.mpegurl; charset=utf-8");
+    r.body.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Stream proxy error");
+  }
+});
+
+// ✅ الصفحة الافتراضية
+app.get("/", (req, res) => {
+  res.send("✅ Xtream Proxy is running successfully");
+});
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("LISTEN", PORT));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Xtream Proxy running on port ${PORT}`);
+});
