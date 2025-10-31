@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>قنوات Xtream عبر التطبيق</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Tahoma,Arial; background:#0b0f17; color:#e9edf1; margin:0}
+  header{padding:16px; background:#111827; border-bottom:1px solid #1f2937}
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+  input,button,select{padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0f172a; color:#e5e7eb}
+  button{cursor:pointer} button.primary{background:#2563eb; border-color:#1d4ed8}
+  main{display:grid; grid-template-columns: 320px 1fr; gap:14px; padding:14px}
+  @media (max-width: 950px){ main{display:block} }
+  .panel{background:#0f172a; border:1px solid #1f2937; border-radius:14px; padding:12px}
+  .chips{display:flex; gap:8px; flex-wrap:wrap; max-height:46vh; overflow:auto; padding:6px}
+  .chip{border:1px solid #334155; background:#0b1220; border-radius:999px; padding:8px 12px; white-space:nowrap}
+  .chip.active{background:#1d4ed8; border-color:#1d4ed8}
+  .items{max-height:54vh; overflow:auto; padding-right:4px; display:grid; gap:8px}
+  .item{display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; border:1px solid #1f2937; background:#0b1220}
+  .badge{font-size:12px; opacity:.75}
+  video{width:100%; max-height:62vh; background:#000; border-radius:12px; border:1px solid #1f2937}
+  .muted{opacity:.7; font-size:13px}
+  a{color:#93c5fd; text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <strong>🎯 Xtream داخل التطبيق</strong>
+    <span class="muted">— أدخل بيانات السيرفر مرة واحدة ثم اختر التصنيف والقناة</span>
+  </div>
+</header>
+
+<main>
+  <!-- العمود الأيسر: الإعدادات والتصنيفات -->
+  <section class="panel">
+    <h3>إعدادات Xtream</h3>
+    <div class="row" style="margin-top:8px">
+      <input id="host" placeholder="host:port (مثال mhiptv.info:2095)" style="flex:1">
+    </div>
+    <div class="row">
+      <input id="user" placeholder="اسم المستخدم u">
+      <input id="pass" placeholder="كلمة المرور p" type="password">
+      <button id="save" class="primary">حفظ / تحديث</button>
+    </div>
+    <p class="muted">يمكنك أيضا فتح الصفحة هكذا:<br>
+      <code>?host=HOST:PORT&u=USER&p=PASS</code>
+    </p>
+
+    <h3 style="margin-top:10px">التصنيفات</h3>
+    <div id="cats" class="chips"></div>
+  </section>
+
+  <!-- العمود الأيمن: الفيديو + قائمة القنوات -->
+  <section class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h3>المشغل</h3>
+      <div class="muted" id="status">جاهز</div>
+    </div>
+
+    <video id="player" controls playsinline>
+      <source id="videoSrc" type="application/vnd.apple.mpegurl">
+    </video>
+
+    <div class="row" style="margin-top:10px">
+      <select id="sort">
+        <option value="name">الاسم (أ-ي)</option>
+        <option value="id">حسب المعرّف</option>
+      </select>
+      <input id="q" placeholder="ابحث باسم القناة..." style="flex:1">
+    </div>
+
+    <h4 style="margin:10px 0 6px">القنوات</h4>
+    <div id="streams" class="items"></div>
+  </section>
+</main>
+
+<script>
+// 1) عدّل هذا لو تغيّر رابط الWorker عندك:
+const BASE_PROXY = "https://ai-core-proxy.bassam-7111111.workers.dev";
+
+// 2) قراءة الإعدادات
+const url = new URL(location.href);
+const state = {
+  host: url.searchParams.get("host") || localStorage.getItem("xt_host") || "",
+  u:    url.searchParams.get("u")    || localStorage.getItem("xt_u")    || "",
+  p:    url.searchParams.get("p")    || localStorage.getItem("xt_p")    || "",
+  catId: null,
+  allStreams: [],
+};
+
+const $ = (id)=>document.getElementById(id);
+$("host").value = state.host;
+$("user").value = state.u;
+$("pass").value = state.p;
+
+$("save").onclick = () => {
+  state.host = $("host").value.trim();
+  state.u    = $("user").value.trim();
+  state.p    = $("pass").value.trim();
+  localStorage.setItem("xt_host", state.host);
+  localStorage.setItem("xt_u", state.u);
+  localStorage.setItem("xt_p", state.p);
+  loadCategories();
+};
+
+function setStatus(msg){ $("status").textContent = msg; }
+function qp(obj){ return Object.entries(obj).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&"); }
+function needCreds(){ return !(state.host && state.u && state.p); }
+
+// 3) جلب التصنيفات من الWorker
+async function loadCategories(){
+  if (needCreds()){ setStatus("أدخل بيانات Xtream ثم اضغط حفظ"); $("cats").innerHTML=""; $("streams").innerHTML=""; return; }
+  setStatus("جلب التصنيفات…");
+  $("cats").innerHTML = "…";
+  try{
+    const qs = qp({host: state.host, u: state.u, p: state.p, endpoint: "player_api.php", action: "get_live_categories"});
+    const res = await fetch(`${BASE_PROXY}/xtream?${qs}`);
+    const cats = await res.json();
+    $("cats").innerHTML = "";
+    cats.forEach(c=>{
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.textContent = c.category_name || ("تصنيف #" + c.category_id);
+      b.onclick = ()=> selectCategory(c.category_id, b);
+      $("cats").appendChild(b);
+    });
+    setStatus("جاهز — اختر تصنيفًا");
+  }catch(e){
+    setStatus("تعذر جلب التصنيفات");
+    console.error(e);
+  }
+}
+
+// 4) القنوات داخل التصنيف
+async function selectCategory(category_id, btn){
+  [...document.querySelectorAll(".chip")].forEach(x=>x.classList.remove("active"));
+  btn.classList.add("active");
+  state.catId = category_id;
+  setStatus("جلب القنوات…");
+  $("streams").innerHTML = "…";
+  try{
+    const qs = qp({host: state.host, u: state.u, p: state.p, endpoint: "player_api.php", action: "get_live_streams", category_id});
+    const res = await fetch(`${BASE_PROXY}/xtream?${qs}`);
+    const streams = await res.json();
+    state.allStreams = Array.isArray(streams) ? streams : [];
+    renderStreams();
+    setStatus(`تم — ${state.allStreams.length} قناة`);
+  }catch(e){
+    setStatus("تعذر جلب القنوات");
+    console.error(e);
+  }
+}
+
+// 5) عرض القنوات + البحث + الفرز
+$("q").oninput = renderStreams;
+$("sort").onchange = renderStreams;
+
+function renderStreams(){
+  const q = $("q").value.trim().toLowerCase();
+  const sort = $("sort").value;
+  let items = state.allStreams.slice();
+  if (q) items = items.filter(s => (s.name||"").toLowerCase().includes(q));
+  items.sort((a,b)=> sort==="id" ? (+a.stream_id||0)-(+b.stream_id||0) : (a.name||"").localeCompare(b.name||""));
+
+  $("streams").innerHTML = "";
+  items.forEach(s=>{
+    const div = document.createElement("div");
+    div.className = "item";
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    badge.textContent = "#" + s.stream_id;
+    const name = document.createElement("div");
+    name.style.flex = "1";
+    name.textContent = s.name || "بدون اسم";
+    const play = document.createElement("button");
+    play.textContent = "تشغيل ▶";
+    play.onclick = ()=> playStream(s.stream_id);
+    div.appendChild(name); div.appendChild(badge); div.appendChild(play);
+    $("streams").appendChild(div);
+  });
+}
+
+// 6) التشغيل عبر خادمك: /xplay
+function playStream(stream_id){
+  const url = `/xplay?${qp({host: state.host, u: state.u, p: state.p, stream: stream_id, type: "m3u8"})}`;
+  startVideo(url);
+  setStatus(`تشغيل: #${stream_id}`);
+}
+
+// دعم HLS
+function canNativeHLS(){
+  const v = document.createElement("video");
+  return v.canPlayType('application/vnd.apple.mpegURL') || v.canPlayType('application/x-mpegURL');
+}
+
+async function startVideo(hlsUrl){
+  const video = document.getElementById("player");
+  const srcEl  = document.getElementById("videoSrc");
+
+  if (canNativeHLS()){
+    srcEl.src = hlsUrl;
+    video.load();
+    video.play().catch(()=>{});
+    return;
+  }
+  if (!window.Hls){
+    await new Promise((ok,err)=>{
+      const s=document.createElement("script");
+      s.src="https://cdn.jsdelivr.net/npm/hls.js@latest";
+      s.onload=ok; s.onerror=err; document.head.appendChild(s);
+    });
+  }
+  if (window.Hls && window.Hls.isSupported()){
+    const hls = new Hls();
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=> video.play().catch(()=>{}));
+  }else{
+    srcEl.src = hlsUrl;
+    video.load();
+    video.play().catch(()=>{});
+  }
+}
+
+// تحميل تلقائي
+loadCategories();
+</script>
+</body>
+</html>
