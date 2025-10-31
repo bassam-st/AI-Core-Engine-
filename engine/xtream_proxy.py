@@ -1,100 +1,75 @@
-# engine/xtream_proxy.py
-from fastapi import APIRouter, Query, HTTPException, Response
-from fastapi.responses import StreamingResponse, JSONResponse
-import os, httpx, asyncio
+
+from __future__ import annotations
+from fastapi import APIRouter, Query, Header
+from fastapi.responses import JSONResponse, Response
+from typing import Optional
+import httpx, re
+from urllib.parse import urlencode, quote, urljoin
 
 router = APIRouter(prefix="/api/xtream", tags=["xtream"])
 
-def get_env(key: str, default: str = "") -> str:
-    return os.getenv(key, default).strip()
+def build_player_api(host: str, u: str, p: str, action: str, **params):
+    base = f"http://{host}/player_api.php"
+    q = {"username": u, "password": p, "action": action}
+    q.update(params)
+    return f"{base}?{urlencode(q)}"
 
-def resolve_params(
-    host: str | None, u: str | None, p: str | None
-) -> tuple[str, str, str]:
-    host = (host or get_env("XTREAM_HOST")).strip()
-    u    = (u    or get_env("XTREAM_U")).strip()
-    p    = (p    or get_env("XTREAM_P")).strip()
-    if not (host and u and p):
-        raise HTTPException(status_code=400, detail="XTREAM credentials missing")
-    return host, u, p
-
-def proxy_base() -> str:
-    base = get_env("BASE_PROXY", "")
-    if not base:
-        raise HTTPException(status_code=500, detail="BASE_PROXY not set")
-    return base.rstrip("/")
-
-@router.get("/ping")
-def ping():
-    return {
-        "ok": True,
-        "base_proxy": get_env("BASE_PROXY"),
-        "host": get_env("XTREAM_HOST"),
-        "u_set": bool(get_env("XTREAM_U")),
-        "p_set": bool(get_env("XTREAM_P")),
-    }
+async def fetch_json(url: str):
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.json()
 
 @router.get("/categories")
-async def get_categories(
-    host: str | None = None, u: str | None = None, p: str | None = None
-):
-    host, u, p = resolve_params(host, u, p)
-    qs = f"host={host}&u={u}&p={p}&endpoint=player_api.php&action=get_live_categories"
-    url = f"{proxy_base()}/xtream?{qs}"
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        return JSONResponse(r.json())
+async def categories(host: str, u: str, p: str):
+    url = build_player_api(host, u, p, "get_live_categories")
+    try:
+        data = await fetch_json(url)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+    return data
 
 @router.get("/streams")
-async def get_streams(
-    category_id: str,
-    host: str | None = None, u: str | None = None, p: str | None = None
-):
-    host, u, p = resolve_params(host, u, p)
-    qs = (
-        f"host={host}&u={u}&p={p}"
-        f"&endpoint=player_api.php&action=get_live_streams&category_id={category_id}"
-    )
-    url = f"{proxy_base()}/xtream?{qs}"
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(url)
-        r.raise_for_status()
-        return JSONResponse(r.json())
+async def streams(host: str, u: str, p: str, category_id: str):
+    url = build_player_api(host, u, p, "get_live_streams", category_id=category_id)
+    try:
+        data = await fetch_json(url)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+    for item in data or []:
+        item.setdefault("name", item.get("stream_display_name") or item.get("name"))
+        item.setdefault("stream_id", item.get("stream_id"))
+    return data
+
+@router.get("/proxy")
+async def xtream_proxy(url: str = Query(...), range: Optional[str] = Header(default=None)):
+    headers = {}
+    if range:
+        headers["Range"] = range
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        r = await client.get(url, headers=headers)
+    ct = r.headers.get("content-type", "application/octet-stream")
+    content = r.content
+    if "application/vnd.apple.mpegurl" in ct or url.lower().endswith(".m3u8"):
+        text = content.decode("utf-8", "ignore")
+        def rewrite(line: str) -> str:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                return line
+            base = url.rsplit("/", 1)[0] + "/"
+            if not re.match(r"^https?://", line, flags=re.I):
+                line = urljoin(base, line)
+            return "/api/xtream/proxy?url=" + quote(line, safe=":/?&=%")
+        new_text = "\n".join(rewrite(l) for l in text.splitlines())
+        return Response(new_text, media_type="application/vnd.apple.mpegurl")
+    return Response(content, media_type=ct, headers={"Accept-Ranges": "bytes"})
 
 @router.get("/stream/{stream_id}.m3u8")
-async def hls_m3u8(
-    stream_id: str,
-    host: str | None = None, u: str | None = None, p: str | None = None
-):
-    host, u, p = resolve_params(host, u, p)
-    qs = f"host={host}&u={u}&p={p}&stream={stream_id}&type=m3u8"
-    url = f"{proxy_base()}/xplay?{qs}"
+async def stream_m3u8(stream_id: str, host: str, u: str, p: str):
+    upstream = f"http://{host}/live/{u}/{p}/{stream_id}.m3u8"
+    return await xtream_proxy(url=upstream)  # type: ignore
 
-    async def gen():
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("GET", url) as r:
-                r.raise_for_status()
-                async for chunk in r.aiter_bytes():
-                    yield chunk
-
-    return StreamingResponse(gen(), media_type="application/vnd.apple.mpegURL")
-
-# اختياري: تحويل MPEG-TS (بعض القنوات لا تملك HLS)
 @router.get("/stream/{stream_id}.ts")
-async def ts_mpeg(
-    stream_id: str,
-    host: str | None = None, u: str | None = None, p: str | None = None
-):
-    host, u, p = resolve_params(host, u, p)
-    qs = f"host={host}&u={u}&p={p}&stream={stream_id}&type=ts"
-    url = f"{proxy_base()}/xplay?{qs}"
-
-    async def gen():
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("GET", url) as r:
-                r.raise_for_status()
-                async for chunk in r.aiter_bytes():
-                    yield chunk
-
-    return StreamingResponse(gen(), media_type="video/MP2T")
+async def stream_ts(stream_id: str, host: str, u: str, p: str, range: Optional[str] = Header(default=None)):
+    upstream = f"http://{host}/live/{u}/{p}/{stream_id}.ts"
+    return await xtream_proxy(url=upstream, range=range)  # type: ignore
