@@ -1,4 +1,4 @@
-# main.py — AI-Core-Engine-Live (Xtream Ready)
+# main.py — AI-Core-Engine-Live (Xtream Ready, Final)
 from __future__ import annotations
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-# === النواة (ابقِها كما لديك إن كانت موجودة) ===
+# === النواة (أبقها كما لديك إن كانت موجودة) ===
 from engine.config import cfg
 from engine.retriever import Retriever
 from engine.summarizer import Summarizer
@@ -65,7 +65,7 @@ def _startup():
     except Exception as e:
         print("Startup issue:", e)
 
-# === قوالب (لو لديك مجلد templates؛ وإلا ليست مطلوبة لهذه الواجهة) ===
+# === قوالب ===
 templates = Jinja2Templates(directory="templates")
 
 # === صفحات أساسية ===
@@ -76,16 +76,17 @@ def home():
     <title>{APP_TITLE}</title></head>
     <body style='font-family:Arial;text-align:center;direction:rtl;margin-top:40px'>
       <h2>🧠 {APP_TITLE}</h2>
-      <p>بحث ذكي، توليد، تلخيص، تدريب ذاتي، ومشاهدة مباريات وقنوات Xtream.</p>
+      <p>بحث ذكي، توليد، تلخيص، تدريب ذاتي، ومشاهدة قنوات Xtream.</p>
       <p>
-        <a href='/ui/xtream'>📺 قنوات Xtream</a> |
+        <a href='/ui/xtream'>📺 قنوات Xtream (بسيطة)</a> |
+        <a href='/ui/xtream-screen'>📺 شاشة Xtream (كاملة ومحفوظة)</a> |
         <a href='/ui/sports'>🏟️ مباريات اليوم</a> |
         <a href='/docs'>Swagger</a>
       </p>
     </body></html>
     """
 
-# === واجهة قنوات Xtream ===
+# === واجهة قنوات Xtream (بسيطة) ===
 @app.get("/ui/xtream", response_class=HTMLResponse)
 def ui_xtream():
     return """
@@ -142,7 +143,7 @@ function render(){
   }
 }
 async function play(id){
-  // استخدم بروكسي m3u8 لتجاوز Mixed Content
+  // نستخدم بروكسي المانيفست لتفادي Mixed Content
   const url = '/api/xtream/stream/'+id+'.m3u8';
   document.getElementById('player').style.display='block';
   document.getElementById('now').innerText='تشغيل: '+id;
@@ -152,6 +153,11 @@ load();
 </script>
 </body></html>
 """
+
+# === شاشة Xtream الكاملة (من ملف القوالب) ===
+@app.get("/ui/xtream-screen", response_class=HTMLResponse)
+def ui_xtream_screen(request: Request):
+    return templates.TemplateResponse("xtream-screen.html", {"request": request})
 
 # === مباريات اليوم (اختياري) ===
 @app.get("/api/sports/today")
@@ -167,7 +173,7 @@ def ui_sports_page() -> HTMLResponse:
 <style>body{background:#0f172a;color:#e2e8f0;font-family:system-ui,Segoe UI,Arial;padding:16px}</style>
 </head><body>
 <h2>🏟️ مباريات اليوم</h2>
-<p>هذه صفحة مبسطة. إن أردت نسختك القديمة أخبرني أرسلك القالب كامل.</p>
+<p>صفحة مبسطة للاختبار.</p>
 </body></html>
     """)
 
