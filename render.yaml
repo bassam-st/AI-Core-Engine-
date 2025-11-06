@@ -1,12 +1,23 @@
 services:
   - type: web
-    name: bassam-ai-xtream
+    name: ai-core-engine-live
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
-      - key: OPENAI_API_KEY
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: USE_GOOGLE_CSE
+        value: "1"
+      - key: GOOGLE_API_KEY
         sync: false
-      - key: MODEL
-        value: gpt-4o-mini
+      - key: GOOGLE_CSE_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATA_DIR
+        value: /data
+    autoDeploy: true

@@ -1,153 +1,189 @@
-# main.py
+# main.py — النسخة النهائية AI-Core-Engine-Live
 from __future__ import annotations
 import os
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-import httpx
-from fastapi import FastAPI, Query, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (
-    HTMLResponse,
-    Response,
-    FileResponse,
-    StreamingResponse,
-)
-from starlette.staticfiles import StaticFiles
+# === استيرادات النواة ===
+from engine.config import cfg
+from engine.retriever import Retriever
+from engine.summarizer import Summarizer
+from engine.generator import AnswerSynthesizer
+from engine.intent import IntentModel
+from engine.sentiment import SentimentAnalyzer
+from engine.memory import ConversationMemory, init_db
+from engine.ingest import Ingestor
+from engine.trainer import AutoTrainer
+from engine.web import web_search, wiki_summary_ar, google_cse_search
+from engine.coder import Scaffolder
+from engine.web_agent import gather_web  # عامل الويب الجديد
 
-APP_DIR = Path(__file__).parent.resolve()
-STATIC_DIR = APP_DIR / "static"
+APP_TITLE = "النواة الذكية الاحترافية – Bassam"
+app = FastAPI(title=APP_TITLE)
 
-app = FastAPI(title="AI Core Engine")
+# --- مجلدات ---
+os.makedirs(cfg.DATA_DIR, exist_ok=True)
+EXPORT_DIR = Path(cfg.DATA_DIR) / "exports"
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/exports", StaticFiles(directory=str(EXPORT_DIR)), name="exports")
 
-# ----------------------[ CORS ]----------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=False,
-)
+# --- مكونات النواة ---
+retriever = Retriever()
+summarizer = Summarizer()
+generator = AnswerSynthesizer()
+intent_model = IntentModel()
+sentiment = SentimentAnalyzer()
+memory = ConversationMemory()
+ingestor = Ingestor()
+auto_trainer = AutoTrainer(intent_model, memory)
+scaffolder = Scaffolder()
 
-# ----------------------[ STATIC ]--------------------
-# /static -> مجلد static (اختياري إن كنت تستخدم css/js)
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+@app.on_event("startup")
+def _startup():
+    init_db()
+    try:
+        retriever.rebuild_index()
+        intent_model.load_or_init()
+    except Exception as e:
+        print("Startup issue:", e)
 
-# ----------------------[ HEALTH ]--------------------
-@app.get("/healthz")
-async def healthz():
-    return {"ok": True}
+# === نماذج البيانات ===
+class ChatRequest(BaseModel):
+    user_id: str = "default"
+    message: str
+    top_k: int = 5
+    use_web: bool = True
+    use_wiki: bool = True
+    summarize: bool = True
+    save: bool = True
+    style: Optional[str] = None
 
-# ----------------------[ UI /xtream ]----------------
-# يدعم وجود xtream-screen.html في static/ أو في جذر المشروع
-@app.get("/ui/xtream", response_class=HTMLResponse)
-async def ui_xtream():
-    # تفضيل الموجود داخل static/
-    cand = STATIC_DIR / "xtream-screen.html"
-    if cand.exists():
-        return FileResponse(str(cand), media_type="text/html; charset=utf-8")
-    root_one = APP_DIR / "xtream-screen.html"
-    if root_one.exists():
-        return FileResponse(str(root_one), media_type="text/html; charset=utf-8")
-    # صفحة بسيطة في حال لم يجد الملف
-    html = """<!doctype html><meta charset="utf-8">
-    <title>Xtream UI</title><h2>لم يتم العثور على xtream-screen.html</h2>
-    ضع الملف داخل <code>static/xtream-screen.html</code> أو بجانب <code>main.py</code>.
+class UrlIngestRequest(BaseModel):
+    url: str
+
+class TrainExample(BaseModel):
+    text: str
+    intent: str
+
+class ScaffoldRequest(BaseModel):
+    kind: str
+    name: str
+
+class LiveAskRequest(BaseModel):
+    message: str
+    top_n: int = 5
+    include_steps: bool = True
+    style: Optional[str] = None
+
+# === الصفحات الأساسية ===
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return f"""
+    <html><head><meta charset='utf-8'><title>{APP_TITLE}</title></head>
+    <body style='font-family:Arial;text-align:center;direction:rtl;margin-top:40px'>
+      <h2>🧠 {APP_TITLE}</h2>
+      <p>بحث ذكي، توليد، تلخيص، تدريب ذاتي، وواجهة مباشرة للبحث في الإنترنت.</p>
+      <p>
+        <a href='/ui'>واجهة النواة</a> |
+        <a href='/live-ui'>البحث الذكي المباشر</a> |
+        <a href='/docs'>Swagger</a>
+      </p>
+    </body></html>
     """
-    return HTMLResponse(html)
 
-@app.get("/", include_in_schema=False)
-async def root():
-    # توجيه للـ UI
-    return HTMLResponse('<meta http-equiv="refresh" content="0; url=/ui/xtream">')
+# === واجهة البحث الذكي المباشر ===
+@app.get("/live-ui", response_class=HTMLResponse)
+def live_ui():
+    return """
+<!doctype html><html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>بحث ذكي مباشر</title>
+<style>
+  :root{--bg:#0f1222;--card:#161a2d;--text:#eef0ff;--muted:#93a0c9;--accent:#10b981}
+  body{font-family:system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text);margin:0;padding:16px}
+  .wrap{max-width:860px;margin:0 auto}
+  .card{background:var(--card);border-radius:14px;padding:14px;box-shadow:0 6px 20px rgba(0,0,0,.20);margin-bottom:14px}
+  textarea,select{width:100%;padding:12px;border:1px solid #2a3052;background:#0e1120;color:var(--text);border-radius:10px;font-size:16px}
+  button{padding:12px;border:0;border-radius:10px;background:var(--accent);color:#041016;font-weight:700;font-size:16px}
+  pre{white-space:pre-wrap}
+  .muted{color:var(--muted);font-size:13px}
+</style></head>
+<body><div class="wrap">
+<div class="card">
+<h2>🔎 بحث ذكي مباشر</h2>
+<textarea id="q" rows="3" placeholder="اكتب سؤالك هنا..."></textarea>
+<div style="margin-top:8px;display:flex;gap:8px">
+<select id="style">
+<option value="">أسلوب افتراضي</option>
+<option value="friendly">ودود</option>
+<option value="formal">رسمي</option>
+<option value="brief">مختصر</option>
+</select>
+<button onclick="go()">بحث مباشر</button>
+</div>
+<p class="muted">يتم جلب النتائج من جوجل/دك-دك-جو وويكيبيديا العربية.</p>
+</div>
+<div id="out" class="card" style="display:none"></div>
+</div>
+<script>
+async function go(){
+  const out=document.getElementById('out'); out.style.display='block'; out.innerHTML='<b>جارٍ الجمع من المصادر...</b>';
+  const q=document.getElementById('q').value.trim();
+  const style=document.getElementById('style').value||null;
+  if(!q){ out.innerHTML='اكتب سؤالاً أولاً.'; return; }
+  try{
+    const r=await fetch('/ask-live',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:q, style})});
+    const data=await r.json();
+    if(!data.ok){ out.innerHTML='فشل: '+(data.error||''); return; }
+    let src=''; if(data.sources?.length){
+      src='<hr/><b>المصادر:</b><ul>'+data.sources.map(s=>`<li><a href="${s.link}" target="_blank">${s.title||s.link}</a></li>`).join('')+'</ul>';
+    }
+    out.innerHTML=`<div class="muted">المحرّك: <b>${data.engine||'none'}</b> — الأسلوب: ${data.style}</div><pre>${data.answer}</pre>`+src;
+  }catch{ out.innerHTML='تعذّر الاتصال.'; }
+}
+</script></body></html>
+"""
 
-# ====================================================
-#           تشغيل القنوات عبر خادمك (Proxy)
-# ====================================================
-# الفكرة:
-# 1) /xplay يرجّع لك ملف m3u8 بعد "إعادة الكتابة" لكل سطر غير تعليقي
-#    بحيث يصبح رابط القطعة عبر خادمك /xproxy?url=...
-# 2) /xproxy يقوم بتمرير أي رابط (m3u8/ts) مع ترويسات صحيحة
-#    وبدون CORS مشاكل.
+# === البحث الذكي المباشر (API) ===
+@app.post("/ask-live")
+def ask_live(req: LiveAskRequest):
+    q = (req.message or "").strip()
+    if not q:
+        return JSONResponse({"ok": False, "error": "الرسالة فارغة."}, status_code=400)
 
-# -------- Helper: عميل HTTP مشترك --------
-def _client() -> httpx.AsyncClient:
-    # follow_redirects مهم لأن بعض السيرفرات تعيد توجيه
-    return httpx.AsyncClient(follow_redirects=True, timeout=None)
+    if req.style:
+        generator.set_style(req.style)
+    intent = intent_model.predict(q)
+    senti = sentiment.analyze(q)
 
-# -------- /xplay : يرجع m3u8 مُعاد كتابته --------
-@app.get("/xplay")
-async def xplay(
-    host: str = Query(..., description="host:port مثل mhiptv.info:2095"),
-    u: str = Query(..., description="اسم المستخدم"),
-    p: str = Query(..., description="كلمة المرور"),
-    stream: str = Query(..., description="رقم القناة/stream_id"),
-    type: str = Query("m3u8", description="m3u8 أو m3u8_index ..."),
-):
-    # عنوان قائمة التشغيل الأصلية
-    ext = type or "m3u8"
-    upstream_m3u8 = f"http://{host}/live/{u}/{p}/{stream}.{ext}"
+    try:
+        web_snippets, sources, wiki, engine_used = gather_web(q, num=req.top_n, fetch_pages=True)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
-    async with _client() as client:
-        r = await client.get(upstream_m3u8)
-        if r.status_code != 200:
-            raise HTTPException(status_code=r.status_code, detail=f"Cannot fetch playlist: {upstream_m3u8}")
-
-        text = r.text or ""
-        # مسار الأساس للقطع إن كانت نسبيّة
-        base = f"http://{host}/live/{u}/{p}/{stream}/"
-
-        rewritten_lines = []
-        for line in text.splitlines():
-            s = line.strip()
-            if not s or s.startswith("#"):
-                rewritten_lines.append(line)
-                continue
-
-            # إن كان الرابط مطلقًا نلفّه كما هو، وإلا نُكوّن رابطًا كاملاً عبر base
-            if s.startswith("http://") or s.startswith("https://"):
-                target = s
-            else:
-                target = base + s
-
-            proxied = f"/xproxy?url={quote(target, safe='')}"
-            rewritten_lines.append(proxied)
-
-        rewritten = "\n".join(rewritten_lines) + "\n"
-
-    # مهم: Content-Type المناسب للـ HLS
-    return Response(
-        content=rewritten,
-        media_type="application/vnd.apple.mpegurl; charset=utf-8",
-        headers={
-            # السماح بالتخزين المؤقت البسيط يحسن السلاسة أحيانًا
-            "Cache-Control": "no-cache"
-        },
+    answer = generator.answer(
+        query=q,
+        context="",
+        intent=intent,
+        sentiment=senti.get("label", "neutral"),
+        web_snippets=web_snippets,
+        wiki=wiki,
     )
 
-# -------- /xproxy : يمرر m3u8/ts/… كما هو --------
-@app.get("/xproxy")
-async def xproxy(url: str = Query(..., description="الرابط المطلق للملف (m3u8 أو ts)")):
-    # أمان بسيط: يسمح فقط بـ http/https
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise HTTPException(status_code=400, detail="Only http/https are allowed")
+    return JSONResponse({
+        "ok": True,
+        "engine": engine_used,
+        "style": req.style or generator.style,
+        "answer": answer,
+        "sources": sources
+    })
 
-    async def streamer():
-        async with _client() as client:
-            async with client.stream("GET", url) as resp:
-                if resp.status_code != 200:
-                    raise HTTPException(status_code=resp.status_code, detail=f"Upstream error for {url}")
-                async for chunk in resp.aiter_bytes():
-                    yield chunk
-
-    # تحديد نوع المحتوى حسب الامتداد أو ترويسة المصدر
-    guessed = "application/octet-stream"
-    path = parsed.path.lower()
-    if path.endswith(".m3u8"):
-        guessed = "application/vnd.apple.mpegurl"
-    elif path.endswith(".ts"):
-        guessed = "video/mp2t"
-
-    return StreamingResponse(streamer(), media_type=guessed, headers={"Cache-Control": "no-cache"})
+# === فحص الصحة ===
+@app.get("/ping")
+def ping():
+    return {"ok": True, "engine": APP_TITLE}
