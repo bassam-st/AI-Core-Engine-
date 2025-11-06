@@ -1,315 +1,149 @@
-# Retry: write the finalized index.html to /mnt/data
-
-from pathlib import Path
-
-
-
-html = """\
-
 <!doctype html>
-
 <html lang="ar" dir="rtl">
-
 <head>
-
   <meta charset="utf-8">
-
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>نواة بسّام الذكية — واجهة مع بادجات النية/المشاعر/المصادر</title>
-
   <style>
-
     body { font-family: system-ui, -apple-system, Segoe UI, Tahoma, Arial; background:#f6f6f8; margin:0; }
-
     .wrap { max-width: 820px; margin: 40px auto; background:#fff; border-radius:16px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.08); }
-
     h1 { margin-top:0 }
-
     textarea { width:100%; min-height:100px; padding:12px; font-size:16px; }
-
     button { padding:10px 16px; border-radius:10px; border:0; cursor:pointer }
-
     .answer { white-space:pre-wrap; background:#fafafa; padding:16px; border-radius:12px; margin-top:12px; }
-
     .sources { margin-top:8px; font-size:13px; color:#666 }
-
     .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
-
     input[type=file] { display:block; }
-
     .muted{ color:#777; font-size:13px }
 
-
-
     /* Step 2: badges styles */
-
     .meta { margin-top:10px; display:none; gap:8px; flex-wrap:wrap }
-
     .badge { font-size:12px; padding:6px 10px; border-radius:999px; background:#f1f5f9; color:#0f172a; border:1px solid #e2e8f0; display:inline-flex; align-items:center }
-
     .badge .icon { margin-inline-end:6px; opacity:.9 }
-
     .badge.intent { background:#eef2ff; border-color:#e0e7ff }
-
     .badge.sentiment { background:#ecfeff; border-color:#cffafe }
-
     .badge.sources { background:#f0f9ff; border-color:#e0f2fe }
-
   </style>
-
 </head>
-
 <body>
-
   <div class="wrap">
-
     <h1>نواة بسّام الذكية — MVP</h1>
-
     <p class="muted">أدخل سؤالك ثم اضغط "اسأل". أضف ملفات نصية (.txt/.md) إلى knowledge من خلال الرفع (خاص بالمالك).</p>
-
     <textarea id="q" placeholder="اكتب سؤالك هنا…"></textarea>
-
     <div class="row">
-
       <button id="askBtn">اسأل</button>
-
       <span id="status" class="muted"></span>
-
     </div>
-
     <div id="out" class="answer" style="display:none"></div>
 
-
-
     <!-- Step 1: badges container -->
-
     <div id="meta" class="meta">
-
       <span id="intentBadge" class="badge"></span>
-
       <span id="sentimentBadge" class="badge"></span>
-
       <span id="sourcesBadge" class="badge"></span>
-
     </div>
 
-
-
     <hr style="margin:24px 0">
-
     <h3>رفع ملف معرفة (المالك فقط)</h3>
-
     <input type="file" id="file">
-
     <input type="password" id="pin" placeholder="X-Owner-Pin">
-
     <button id="upBtn">رفع</button>
-
     <div id="upStatus" class="muted"></div>
-
   </div>
 
-
-
 <script>
-
 // Step 3: helpers to render badges
-
 function intentIcon(intent){
-
   switch((intent||'').toLowerCase()){
-
     case 'web_search': return '🌐 بحث ويب';
-
     case 'qa_local':   return '📚 معرفة محلية';
-
     case 'summarize':  return '📝 تلخيص';
-
     case 'translate':  return '🌎 ترجمة';
-
     case 'calculate':  return '🧮 حساب';
-
     case 'analyze':    return '🔎 تحليل';
-
     case 'compare':    return '⚖️ مقارنة';
-
     default:           return '🤖 ذكي';
-
   }
-
 }
-
 function sentimentEmoji(s){
-
   switch((s||'').toLowerCase()){
-
     case 'positive': return '😊 إيجابي';
-
     case 'negative': return '☹️ سلبي';
-
     case 'neutral':  return '😐 محايد';
-
     default:         return '🙂 عام';
-
   }
-
 }
-
 function formatSources(sources){
-
   if(!sources || !sources.length) return 'لا مصادر';
-
   const hosts = sources.slice(0,3).map(x=>{
-
     const u = (typeof x==='string') ? x : (x.host || x.url || x.path || '');
-
     try { return new URL(u).host || u; } catch { return u; }
-
   });
-
   const more = sources.length>3 ? ` +${sources.length-3}` : '';
-
   return hosts.join(' · ') + more;
-
 }
-
 function showMeta(meta){
-
   const metaBox = document.getElementById('meta');
-
   const iB = document.getElementById('intentBadge');
-
   const sB = document.getElementById('sentimentBadge');
-
   const srcB = document.getElementById('sourcesBadge');
-
   const intent = meta?.intent || meta?.mode || meta?.task;
-
   const sentiment = meta?.sentiment || meta?.tone;
-
   const sources = meta?.sources || meta?.refs || meta?.links;
-
   iB.className = 'badge intent';
-
   sB.className = 'badge sentiment';
-
   srcB.className = 'badge sources';
-
   iB.innerHTML = `<span class="icon">🧠</span>${intentIcon(intent)}`;
-
   sB.innerHTML = `<span class="icon">💬</span>${sentimentEmoji(sentiment)}`;
-
   srcB.innerHTML = `<span class="icon">🔗</span>${formatSources(sources)}`;
-
   metaBox.style.display = 'flex';
-
 }
-
-
 
 // Existing ask/upload logic plus Step 4: call showMeta
-
 const askBtn = document.getElementById('askBtn');
-
 const statusEl = document.getElementById('status');
-
 const out = document.getElementById('out');
 
-
-
 askBtn.onclick = async () => {
-
   const q = document.getElementById('q').value.trim();
-
   if (!q) { alert('اكتب السؤال'); return; }
-
   statusEl.textContent = '...جاري التوليد';
-
   out.style.display = 'none';
-
   document.getElementById('meta').style.display = 'none';
-
   try {
-
     const r = await fetch('/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({q})});
-
     const j = await r.json();
-
     if (!r.ok) throw new Error(j.detail || 'خطأ');
-
     out.textContent = j.answer || '';
-
     out.style.display = 'block';
 
-
-
     // Step 4: unify meta shape & render badges
-
     if (j.meta || j.intent || j.sentiment || j.sources) {
-
       const meta = j.meta || { intent: j.intent, sentiment: j.sentiment, sources: j.sources };
-
       showMeta(meta);
-
     }
-
     statusEl.textContent = '';
-
   } catch(e) {
-
     statusEl.textContent = 'حدث خطأ: ' + e.message;
-
   }
-
 };
-
-
 
 document.getElementById('upBtn').onclick = async () => {
-
   const f = document.getElementById('file').files[0];
-
   const pin = document.getElementById('pin').value;
-
   if (!f) { alert('اختر ملف'); return; }
-
   if (!pin) { alert('أدخل X-Owner-Pin'); return; }
-
   const fd = new FormData();
-
   fd.append('file', f);
-
   try {
-
     const r = await fetch('/api/ingest/upload', { method:'POST', headers:{'X-Owner-Pin': pin}, body: fd });
-
     const j = await r.json();
-
     if (!r.ok) throw new Error(j.detail || 'خطأ');
-
     document.getElementById('upStatus').textContent = 'تم رفع الملف: ' + j.saved;
-
   } catch(e) {
-
     document.getElementById('upStatus').textContent = 'خطأ: ' + e.message;
-
   }
-
 };
-
 </script>
-
 </body>
-
 </html>
-
-"""
-
-
-
-out_path = "/mnt/data/index-with-intent-badges.html"
-
-Path(out_path).write_text(html, encoding="utf-8")
-
-out_path
